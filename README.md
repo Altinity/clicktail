@@ -1,5 +1,7 @@
 # honeytail
 
+[![Build Status](https://travis-ci.org/honeycombio/honeytail.svg?branch=master)](https://travis-ci.org/honeycombio/honeytail)
+
 ## Summary
 
 honeytail is used to send log file data into Honeycomb.
