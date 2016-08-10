@@ -6,10 +6,6 @@ addons:
         paths:
         - $GOPATH/bin
 
-env:
-    - ARTIFACTS_BUCKET=$(test "${TRAVIS_BRANCH}" == "master" && echo hound-deploy-artifacts || echo hound-branch-artifacts) # overrides travis-ci.com settings
-
-sudo: required
 dist: trusty
 
 go:
