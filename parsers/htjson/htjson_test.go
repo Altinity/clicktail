@@ -69,31 +69,26 @@ var tts = []testTimestamp{
 		format:    "2006-01-02 15:04:05.999999999 -0700 MST",
 		fieldName: "time",
 		input:     map[string]interface{}{"time": "2014-03-10 19:57:38.123456789 -0800 PST"},
-		expected:  time.Unix(1397188658, 123456789),
 	},
 	{
 		format:    time.RFC3339Nano,
 		fieldName: "timestamp",
 		input:     map[string]interface{}{"timestamp": "2014-04-10T19:57:38.123456789-08:00"},
-		expected:  time.Unix(1397188658, 123456789),
 	},
 	{
 		format:    time.RFC3339,
 		fieldName: "Date",
 		input:     map[string]interface{}{"Date": "2014-04-10T19:57:38-08:00"},
-		expected:  time.Unix(1397188658, 0),
 	},
 	{
 		format:    time.RubyDate,
 		fieldName: "datetime",
 		input:     map[string]interface{}{"datetime": "Thu Apr 10 19:57:38.123456789 -0800 2014"},
-		expected:  time.Unix(1397188658, 123456789),
 	},
 	{
 		format:    time.UnixDate,
 		fieldName: "DateTime",
 		input:     map[string]interface{}{"DateTime": "Thu Apr 10 19:57:38 PST 2014"},
-		expected:  time.Unix(1397188658, 0),
 	},
 }
 
@@ -168,4 +163,34 @@ func TestGetTimestampCustomFormat(t *testing.T) {
 	if !resp.Equal(p.nower.Now()) {
 		t.Errorf("resp time %s didn't match expected time %s", resp, p.nower.Now())
 	}
+}
+
+func TestCommaInTimestamp(t *testing.T) {
+	p := &Parser{
+		nower: &FakeNower{},
+		conf:  Options{},
+	}
+	commaTimes := []testTimestamp{
+		{ // test commas as the fractional portion separator
+			format:    "2006-01-02 15:04:05,999999999 -0700 MST",
+			fieldName: "time",
+			input:     map[string]interface{}{"time": "2014-03-10 12:57:38,123456789 -0700 PDT"},
+			expected:  time.Unix(1394481458, 123456789),
+		},
+		{
+			format:    "2006-01-02 15:04:05.999999999 -0700 MST",
+			fieldName: "time",
+			input:     map[string]interface{}{"time": "2014-03-10 12:57:38,123456789 -0700 PDT"},
+			expected:  time.Unix(1394481458, 123456789),
+		},
+	}
+	for i, tTimeSet := range commaTimes {
+		p.conf.Format = tTimeSet.format
+		expectedTime := tTimeSet.expected
+		resp := p.getTimestamp(tTimeSet.input)
+		if !resp.Equal(expectedTime) {
+			t.Errorf("time %d: resp time %s didn't match expected time %s", i, resp, expectedTime)
+		}
+	}
+
 }

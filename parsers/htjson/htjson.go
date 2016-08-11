@@ -4,6 +4,7 @@ package htjson
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -38,11 +39,11 @@ func (r *RealNower) Now() time.Time {
 	return time.Now().UTC()
 }
 
-func (n *Parser) Init(options interface{}) error {
-	n.conf = *options.(*Options)
+func (p *Parser) Init(options interface{}) error {
+	p.conf = *options.(*Options)
 
-	n.nower = &RealNower{}
-	n.lineParser = &JSONLineParser{}
+	p.nower = &RealNower{}
+	p.lineParser = &JSONLineParser{}
 	return nil
 }
 
@@ -149,21 +150,26 @@ func (p *Parser) getTimestamp(m map[string]interface{}) time.Time {
 }
 
 func (p *Parser) tryTimeFormats(t string) time.Time {
+	// golang can't parse times with decimal fractional seconds marked by a comma
+	// hack it by just replacing all commas with periods and hope it works out.
+	// https://github.com/golang/go/issues/6189
+	t = strings.Replace(t, ",", ".", -1)
 	if p.conf.Format != "" {
-		if ts, err := time.Parse(p.conf.Format, t); err == nil {
+		format := strings.Replace(p.conf.Format, ",", ".", -1)
+		if ts, err := time.Parse(format, t); err == nil {
 			return ts
 		}
 	}
 
 	var ts time.Time
-	if t_other, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", t); err == nil {
-		ts = t_other
-	} else if t_other, err := time.Parse(time.RFC3339Nano, t); err == nil {
-		ts = t_other
-	} else if t_other, err := time.Parse(time.RubyDate, t); err == nil {
-		ts = t_other
-	} else if t_other, err := time.Parse(time.UnixDate, t); err == nil {
-		ts = t_other
+	if tOther, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", t); err == nil {
+		ts = tOther
+	} else if tOther, err := time.Parse(time.RFC3339Nano, t); err == nil {
+		ts = tOther
+	} else if tOther, err := time.Parse(time.RubyDate, t); err == nil {
+		ts = tOther
+	} else if tOther, err := time.Parse(time.UnixDate, t); err == nil {
+		ts = tOther
 	}
 	return ts
 }
