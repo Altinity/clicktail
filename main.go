@@ -56,7 +56,7 @@ type GlobalOptions struct {
 }
 
 type RequiredOptions struct {
-	ParserName string   `short:"p" long:"parser" description:"Parser module to use"`
+	ParserName string   `short:"p" long:"parser" description:"Parser module to use. Use --list to list available options."`
 	WriteKey   string   `short:"k" long:"writekey" description:"Team write key"`
 	LogFiles   []string `short:"f" long:"file" description:"Log file(s) to parse. Use '-' for STDIN, use this flag multiple times to tail multiple files, or use a glob (/path/to/foo-*.log)"`
 	Dataset    string   `short:"d" long:"dataset" description:"Name of the dataset"`
