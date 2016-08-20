@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/honeycombio/honeytail/event"
 	"github.com/tmc/mongologtools/parser"
+
+	"github.com/honeycombio/honeytail/event"
 )
 
 type Options struct {

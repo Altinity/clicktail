@@ -14,9 +14,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/honeycombio/honeytail/tail"
 )
 
