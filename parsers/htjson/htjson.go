@@ -4,10 +4,12 @@ package htjson
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
+
 	"github.com/honeycombio/honeytail/event"
 )
 
@@ -20,7 +22,7 @@ var possibleTimeFieldNames = []string{
 
 type Options struct {
 	TimeFieldName string `long:"timefield" description:"Name of the field that contains a timestamp"`
-	Format        string `long:"format" description:"Format of the timestamp found in timefield. Please use the reference time Mon Jan 2 15:04:05 -0700 MST 2006"`
+	Format        string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
 }
 
 type Parser struct {
@@ -154,8 +156,20 @@ func (p *Parser) tryTimeFormats(t string) time.Time {
 	// hack it by just replacing all commas with periods and hope it works out.
 	// https://github.com/golang/go/issues/6189
 	t = strings.Replace(t, ",", ".", -1)
+	if p.conf.Format == UnixTimestampFmt {
+		if unix, err := strconv.ParseInt(t, 0, 64); err == nil {
+			return time.Unix(unix, 0)
+		}
+	}
 	if p.conf.Format != "" {
 		format := strings.Replace(p.conf.Format, ",", ".", -1)
+		if strings.Contains(format, StrftimeChar) {
+			if ts, err := time.Parse(convertTimeFormat(format), t); err == nil {
+				return ts
+			}
+		}
+
+		// Still try Go style, just in case
 		if ts, err := time.Parse(format, t); err == nil {
 			return ts
 		}
