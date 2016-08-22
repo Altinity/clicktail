@@ -96,12 +96,6 @@ var tts = []testTimestamp{
 		expected:  time.Unix(1397188658, 123456789),
 	},
 	{
-		format:    time.UnixDate,
-		fieldName: "DateTime",
-		input:     map[string]interface{}{"DateTime": "Thu Apr 10 19:57:38 PST 2014"},
-		expected:  time.Unix(1397188658, 0),
-	},
-	{
 		format:    "%Y-%m-%d %H:%M",
 		fieldName: "time",
 		input:     map[string]interface{}{"time": "2014-07-30 07:02"},
@@ -124,6 +118,11 @@ var tts = []testTimestamp{
 		fieldName: "time",
 		input:     map[string]interface{}{"time": "1440116565"},
 		expected:  time.Unix(1440116565, 0),
+	},
+	{
+		format:   "%Y-%m-%d %z",
+		input:    map[string]interface{}{"time": "2014-04-10 -0700"},
+		expected: time.Unix(1397113200, 0),
 	},
 }
 
@@ -153,10 +152,10 @@ func TestGetTimestampInvalid(t *testing.T) {
 }
 
 func TestGetTimestampCustomFormat(t *testing.T) {
-	weirdFormat := "Mon // 02 ---- Jan ... 06 15:04:05 MST"
+	weirdFormat := "Mon // 02 ---- Jan ... 06 15:04:05 -0700"
 
-	testStr := "Mon // 09 ---- Aug ... 10 15:34:56 PST"
-	expected := time.Date(2010, 8, 9, 16, 34, 56, 0, time.FixedZone("PST", -25200))
+	testStr := "Mon // 09 ---- Aug ... 10 15:34:56 -0800"
+	expected := time.Date(2010, 8, 9, 15, 34, 56, 0, time.FixedZone("PST", -28800))
 
 	// with just Format defined
 	p := &Parser{
