@@ -68,37 +68,71 @@ var tts = []testTimestamp{
 	{
 		format:    "2006-01-02 15:04:05.999999999 -0700 MST",
 		fieldName: "time",
-		input:     map[string]interface{}{"time": "2014-03-10 19:57:38.123456789 -0800 PST"},
+		input:     map[string]interface{}{"time": "2014-04-10 19:57:38.123456789 -0800 PST"},
+		expected:  time.Unix(1397188658, 123456789),
 	},
 	{
 		format:    time.RFC3339Nano,
 		fieldName: "timestamp",
 		input:     map[string]interface{}{"timestamp": "2014-04-10T19:57:38.123456789-08:00"},
+		expected:  time.Unix(1397188658, 123456789),
 	},
 	{
 		format:    time.RFC3339,
 		fieldName: "Date",
 		input:     map[string]interface{}{"Date": "2014-04-10T19:57:38-08:00"},
+		expected:  time.Unix(1397188658, 0),
+	},
+	{
+		format:    time.RFC3339,
+		fieldName: "Date",
+		input:     map[string]interface{}{"Date": "2014-04-10T19:57:38Z"},
+		expected:  time.Unix(1397159858, 0),
 	},
 	{
 		format:    time.RubyDate,
 		fieldName: "datetime",
 		input:     map[string]interface{}{"datetime": "Thu Apr 10 19:57:38.123456789 -0800 2014"},
+		expected:  time.Unix(1397188658, 123456789),
 	},
 	{
-		format:    time.UnixDate,
-		fieldName: "DateTime",
-		input:     map[string]interface{}{"DateTime": "Thu Apr 10 19:57:38 PST 2014"},
+		format:    "%Y-%m-%d %H:%M",
+		fieldName: "time",
+		input:     map[string]interface{}{"time": "2014-07-30 07:02"},
+		expected:  time.Unix(1406703720, 0),
+	},
+	{
+		format:    "%Y-%m-%d %k:%M", // check trailing space behavior
+		fieldName: "time",
+		input:     map[string]interface{}{"time": "2014-07-30  7:02"},
+		expected:  time.Unix(1406703720, 0),
+	},
+	{
+		format:    "%Y-%m-%d %H:%M:%S",
+		fieldName: "time",
+		input:     map[string]interface{}{"time": "2014-07-30 07:02:15"},
+		expected:  time.Unix(1406703735, 0),
+	},
+	{
+		format:    UnixTimestampFmt,
+		fieldName: "time",
+		input:     map[string]interface{}{"time": "1440116565"},
+		expected:  time.Unix(1440116565, 0),
+	},
+	{
+		format:   "%Y-%m-%d %z",
+		input:    map[string]interface{}{"time": "2014-04-10 -0700"},
+		expected: time.Unix(1397113200, 0),
 	},
 }
 
 func TestGetTimestampValid(t *testing.T) {
 	p := &Parser{nower: &FakeNower{}}
 	for i, tTimeSet := range tts {
-		testTime, _ := time.Parse(tTimeSet.format, tTimeSet.input[tTimeSet.fieldName].(string))
+		p.conf = Options{TimeFieldName: tTimeSet.fieldName, Format: tTimeSet.format}
 		resp := p.getTimestamp(tTimeSet.input)
-		if !resp.Equal(testTime) {
-			t.Errorf("time %d: resp time %s didn't match expected time %s", i, resp, testTime)
+		if !resp.Equal(tTimeSet.expected) {
+			t.Errorf("time %d: resp time %s didn't match expected time %s", i, resp, tTimeSet.expected)
 		}
 	}
 }
@@ -118,10 +152,10 @@ func TestGetTimestampInvalid(t *testing.T) {
 }
 
 func TestGetTimestampCustomFormat(t *testing.T) {
-	weirdFormat := "Mon // 02 ---- Jan ... 06 15:04:05 MST"
+	weirdFormat := "Mon // 02 ---- Jan ... 06 15:04:05 -0700"
 
-	testStr := "Mon // 09 ---- Aug ... 10 15:34:56 PST"
-	testTime, _ := time.Parse(weirdFormat, testStr)
+	testStr := "Mon // 09 ---- Aug ... 10 15:34:56 -0800"
+	expected := time.Date(2010, 8, 9, 15, 34, 56, 0, time.FixedZone("PST", -28800))
 
 	// with just Format defined
 	p := &Parser{
@@ -129,8 +163,8 @@ func TestGetTimestampCustomFormat(t *testing.T) {
 		conf:  Options{Format: weirdFormat},
 	}
 	resp := p.getTimestamp(map[string]interface{}{"timestamp": testStr})
-	if !resp.Equal(testTime) {
-		t.Errorf("resp time %s didn't match expected time %s", resp, testTime)
+	if !resp.Equal(expected) {
+		t.Errorf("resp time %s didn't match expected time %s", resp, expected)
 	}
 
 	// with just TimeFieldName defined
@@ -141,9 +175,9 @@ func TestGetTimestampCustomFormat(t *testing.T) {
 		},
 	}
 	// use one of the expected/fallback formats
-	resp = p.getTimestamp(map[string]interface{}{"funkyTime": testTime.Format(time.RubyDate)})
-	if !resp.Equal(testTime) {
-		t.Errorf("resp time %s didn't match expected time %s", resp, testTime)
+	resp = p.getTimestamp(map[string]interface{}{"funkyTime": expected.Format(time.RubyDate)})
+	if !resp.Equal(expected) {
+		t.Errorf("resp time %s didn't match expected time %s", resp, expected)
 	}
 
 	// Now with both defined
@@ -155,8 +189,8 @@ func TestGetTimestampCustomFormat(t *testing.T) {
 		},
 	}
 	resp = p.getTimestamp(map[string]interface{}{"funkyTime": testStr})
-	if !resp.Equal(testTime) {
-		t.Errorf("resp time %s didn't match expected time %s", resp, testTime)
+	if !resp.Equal(expected) {
+		t.Errorf("resp time %s didn't match expected time %s", resp, expected)
 	}
 	// don't parse the "time" field if we're told to look for time in "funkyTime"
 	resp = p.getTimestamp(map[string]interface{}{"time": "2014-04-10 19:57:38.123456789 -0800 PST"})

@@ -17,9 +17,8 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"golang.org/x/sys/unix"
-
 	"github.com/hpcloud/tail"
+	"golang.org/x/sys/unix"
 )
 
 type RotateStyle int

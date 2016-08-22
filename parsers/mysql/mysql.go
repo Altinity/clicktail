@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+
 	"github.com/honeycombio/honeytail/event"
 )
 

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/honeycombio/libhoney-go"
+
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
 	"github.com/honeycombio/honeytail/parsers/htjson"
@@ -15,7 +17,6 @@ import (
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
 	"github.com/honeycombio/honeytail/tail"
-	"github.com/honeycombio/libhoney-go"
 )
 
 // actually go and be leashy

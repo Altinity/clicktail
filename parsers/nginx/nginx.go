@@ -9,8 +9,9 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/charity/gonx"
-	"github.com/honeycombio/honeytail/event"
 	flag "github.com/jessevdk/go-flags"
+
+	"github.com/honeycombio/honeytail/event"
 )
 
 const (
