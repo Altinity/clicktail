@@ -133,25 +133,33 @@ func handleOtherModes(fp *flag.Parser, options GlobalOptions) {
 func sanityCheckOptions(options GlobalOptions) {
 	switch {
 	case options.Reqs.ParserName == "":
-		logrus.Fatal("parser required")
+		fmt.Println("parser required. Call with --help for usage")
+		os.Exit(1)
 	case options.Reqs.WriteKey == "" || options.Reqs.WriteKey == "NULL":
-		logrus.Fatal("write key required")
+		fmt.Println("write key required. Call with --help for usage")
+		os.Exit(1)
 	case len(options.Reqs.LogFiles) == 0:
-		logrus.Fatal("log file name or '-' required")
+		fmt.Println("log file name or '-' required. Call with --help for usage")
+		os.Exit(1)
 	case options.Reqs.Dataset == "":
-		logrus.Fatal("dataset name required")
+		fmt.Println("dataset name required. Call with --help for usage")
+		os.Exit(1)
 	case options.Tail.ReadFrom == "end" && options.Tail.Stop:
-		logrus.Fatal("Reading from the end and stopping when we get there. Zero lines to process. Ok, all done! ;)")
+		fmt.Println("Reading from the end and stopping when we get there. Zero lines to process. Ok, all done! ;) Call with --help for usage")
+		os.Exit(1)
 	case len(options.Reqs.LogFiles) > 1 && options.Tail.StateFile != "":
-		logrus.Fatal("Statefile can not be set when tailing from multiple files")
+		fmt.Println("Statefile can not be set when tailing from multiple files. Call with --help for usage")
+		os.Exit(1)
 	case options.Tail.StateFile != "":
 		files, err := filepath.Glob(options.Reqs.LogFiles[0])
 		if err != nil {
-			logrus.Fatalf("Trying to glob log file %s failed: %+v\n",
+			fmt.Printf("Trying to glob log file %s failed: %+v\n",
 				options.Reqs.LogFiles[0], err)
+			os.Exit(1)
 		}
 		if len(files) > 1 {
-			logrus.Fatal("Statefile can not be set when tailing from multiple files")
+			fmt.Println("Statefile can not be set when tailing from multiple files. Call with --help for usage")
+			os.Exit(1)
 		}
 	}
 }
