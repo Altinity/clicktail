@@ -82,6 +82,7 @@ func main() {
 		} else {
 			fmt.Printf("\tUnexpected extra arguments: %s\n", strings.Join(extraArgs, " "))
 		}
+		usage()
 		os.Exit(1)
 	}
 	rand.Seed(time.Now().UnixNano())
@@ -133,33 +134,50 @@ func handleOtherModes(fp *flag.Parser, options GlobalOptions) {
 func sanityCheckOptions(options GlobalOptions) {
 	switch {
 	case options.Reqs.ParserName == "":
-		fmt.Println("parser required. Call with --help for usage")
+		fmt.Println("parser required.")
+		usage()
 		os.Exit(1)
 	case options.Reqs.WriteKey == "" || options.Reqs.WriteKey == "NULL":
-		fmt.Println("write key required. Call with --help for usage")
+		fmt.Println("write key required.")
+		usage()
 		os.Exit(1)
 	case len(options.Reqs.LogFiles) == 0:
-		fmt.Println("log file name or '-' required. Call with --help for usage")
+		fmt.Println("log file name or '-' required.")
+		usage()
 		os.Exit(1)
 	case options.Reqs.Dataset == "":
-		fmt.Println("dataset name required. Call with --help for usage")
+		fmt.Println("dataset name required.")
+		usage()
 		os.Exit(1)
 	case options.Tail.ReadFrom == "end" && options.Tail.Stop:
-		fmt.Println("Reading from the end and stopping when we get there. Zero lines to process. Ok, all done! ;) Call with --help for usage")
+		fmt.Println("Reading from the end and stopping when we get there. Zero lines to process. Ok, all done! ;)")
+		usage()
 		os.Exit(1)
 	case len(options.Reqs.LogFiles) > 1 && options.Tail.StateFile != "":
-		fmt.Println("Statefile can not be set when tailing from multiple files. Call with --help for usage")
+		fmt.Println("Statefile can not be set when tailing from multiple files.")
+		usage()
 		os.Exit(1)
 	case options.Tail.StateFile != "":
 		files, err := filepath.Glob(options.Reqs.LogFiles[0])
 		if err != nil {
 			fmt.Printf("Trying to glob log file %s failed: %+v\n",
 				options.Reqs.LogFiles[0], err)
+			usage()
 			os.Exit(1)
 		}
 		if len(files) > 1 {
-			fmt.Println("Statefile can not be set when tailing from multiple files. Call with --help for usage")
+			fmt.Println("Statefile can not be set when tailing from multiple files.")
+			usage()
 			os.Exit(1)
 		}
 	}
+}
+
+func usage() {
+	fmt.Print(`
+Usage: honeytail -p <parser> -k <writekey> -f </path/to/logfile> -d <mydata>
+
+For even more detail on required and optional parameters, run
+honeytail --help
+`)
 }
