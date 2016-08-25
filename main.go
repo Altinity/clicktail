@@ -74,7 +74,7 @@ type OtherModes struct {
 func main() {
 	var options GlobalOptions
 	flagParser := flag.NewParser(&options, flag.PrintErrors)
-	flagParser.Usage = "-p <parser> -k <writekey> -f </path/to/logfile> -d <mydata>"
+	flagParser.Usage = "-p <parser> -k <writekey> -f </path/to/logfile> -d <mydata> [optional arguments]"
 	if extraArgs, err := flagParser.Parse(); err != nil || len(extraArgs) != 0 {
 		fmt.Println("Error: failed to parse the command line.")
 		if err != nil {
@@ -175,7 +175,7 @@ func sanityCheckOptions(options GlobalOptions) {
 
 func usage() {
 	fmt.Print(`
-Usage: honeytail -p <parser> -k <writekey> -f </path/to/logfile> -d <mydata>
+Usage: honeytail -p <parser> -k <writekey> -f </path/to/logfile> -d <mydata> [optional arguments]
 
 For even more detail on required and optional parameters, run
 honeytail --help
