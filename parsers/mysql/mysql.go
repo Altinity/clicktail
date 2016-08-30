@@ -2,6 +2,7 @@
 package mysql
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"regexp"
@@ -10,11 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"database/sql"
+	"github.com/honeycombio/honeytail/event"
 
 	"github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/honeycombio/honeytail/event"
 	"github.com/percona/go-mysql/query"
 )
 
@@ -58,9 +58,10 @@ var (
 const timeFormat = "2006-01-02T15:04:05.000000"
 
 type Options struct {
-	Host string `long:"host" description:"MySQL host in the format (address:port)"`
-	User string `long:"user" description:"MySQL username"`
-	Pass string `long:"pass" description:"MySQL password"`
+	Host          string `long:"host" description:"MySQL host in the format (address:port)"`
+	User          string `long:"user" description:"MySQL username"`
+	Pass          string `long:"pass" description:"MySQL password"`
+	QueryInterval uint   `long:"interval" description:"interval for querying the MySQL DB in seconds" default:"30"`
 }
 
 type Parser struct {
@@ -68,6 +69,7 @@ type Parser struct {
 	wg       sync.WaitGroup
 	nower    Nower
 	hostedOn string
+	readOnly bool
 }
 
 type Nower interface {
@@ -99,27 +101,53 @@ type SlowQuery struct {
 	NormalizedQuery string    `json:"normalized_query,omitempty"`
 	DB              string    `json:"db,omitempty"`
 	HostedOn        string    `json:"hosted_on,omitempty"`
+	ReadOnly        bool      `json:"read_only,omitempty"`
 	skipQuery       bool
 }
 
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	p.nower = &RealNower{}
-	if len(p.conf.Host) > 0 {
-		p.hostedOn = getHostedOn(p.conf.Host, p.conf.User, p.conf.Pass)
+	if p.conf.Host != "" {
+		url := fmt.Sprintf("%s:%s@tcp(%s)/", p.conf.User, p.conf.Pass, p.conf.Host)
+		db, err := sql.Open("mysql", url)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// update hostedOn and readOnly every <n> seconds
+		go func() {
+			defer db.Close()
+			ticker := time.NewTicker(time.Second * time.Duration(p.conf.QueryInterval))
+			for _ = range ticker.C {
+				p.hostedOn = getHostedOn(db)
+				p.readOnly = getReadOnly(db)
+			}
+		}()
 	}
 	return nil
 }
 
-func getHostedOn(host, user, pass string) string {
-	url := fmt.Sprintf("%s:%s@tcp(%s)/", user, pass, host)
-	db, err := sql.Open("mysql", url)
+func getReadOnly(db *sql.DB) bool {
+	rows, err := db.Query("SELECT @@global.read_only;")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer rows.Close()
 
-	rows, err := db.Query("SHOW GLOBAL VARIABLES like 'basedir';")
+	var value bool
+
+	rows.Next()
+	if err := rows.Scan(&value); err != nil {
+		log.Fatal(err)
+	}
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return value
+}
+
+func getHostedOn(db *sql.DB) string {
+	rows, err := db.Query("SHOW GLOBAL VARIABLES WHERE Variable_name = 'basedir';")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -180,6 +208,7 @@ func (p *Parser) handleEvents(rawEvents <-chan rawEvent, send chan<- event.Event
 	for rawE := range rawEvents {
 		sq := p.handleEvent(rawE)
 		sq.HostedOn = p.hostedOn
+		sq.ReadOnly = p.readOnly
 		ev, err := p.processSlowQuery(sq)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
@@ -294,5 +323,6 @@ func (s SlowQuery) mapify() map[string]interface{} {
 		"query":            s.Query,
 		"normalized_query": s.NormalizedQuery,
 		"hosted_on":        s.HostedOn,
+		"read_only":        s.ReadOnly,
 	}
 }
