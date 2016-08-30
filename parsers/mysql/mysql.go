@@ -44,6 +44,7 @@ var (
 	reQueryStats = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+) *$")}
 	reSetTime    = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery      = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
+	reUse        = myRegexp{regexp.MustCompile("^(?i)use ")}
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
@@ -84,6 +85,7 @@ type SlowQuery struct {
 	RowsExamined    int       `json:"rows_examined"`
 	Query           string    `json:"query",omitempty`
 	NormalizedQuery string    `json:"normalized_query,omitempty"`
+	DB              string    `json:"db,omitempty"`
 	skipQuery       bool
 }
 
@@ -174,6 +176,13 @@ func (p *Parser) handleEvent(rawE rawEvent) SlowQuery {
 			sq.LockTime, err = strconv.ParseFloat(matchGroups["lockTime"], 64)
 			sq.RowsSent, err = strconv.Atoi(matchGroups["rowsSent"])
 			sq.RowsExamined, err = strconv.Atoi(matchGroups["rowsExamined"])
+		case reUse.FindString(line) != "":
+			db := strings.TrimPrefix(line, reUse.FindString(line))
+			db = strings.TrimRight(db, ";")
+			db = strings.Trim(db, "`")
+			sq.DB = db
+			// Use this line as the query unless, if a real query follows it will be replaced.
+			sq.Query = line
 		case reSetTime.MatchString(line):
 			matchGroups := reSetTime.FindStringSubmatchMap(line)
 			sq.UnixTime, err = strconv.Atoi(matchGroups["unixTime"])

@@ -90,6 +90,21 @@ var sqds = []slowQueryData{
 	},
 	{
 		rawE: rawEvent{
+			lines: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"use someDB;",
+			},
+		},
+		sq: SlowQuery{
+			Timestamp: t2,
+			UnixTime:  1459470669,
+			DB:        "someDB",
+			Query:     "use someDB;",
+		},
+	},
+	{
+		rawE: rawEvent{
 			lines: []string{},
 		},
 		sq: SlowQuery{},
