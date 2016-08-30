@@ -2,14 +2,18 @@
 package mysql
 
 import (
+	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"database/sql"
 
+	"github.com/Sirupsen/logrus"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/honeycombio/honeytail/event"
 	"github.com/percona/go-mysql/query"
 )
@@ -45,17 +49,25 @@ var (
 	reSetTime    = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery      = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
 	reUse        = myRegexp{regexp.MustCompile("^(?i)use ")}
+
+	rdsStr  = "rds"
+	ec2Str  = "ec2"
+	selfStr = "self"
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
 
 type Options struct {
+	Host string `long:"host" description:"MySQL host in the format (address:port)"`
+	User string `long:"user" description:"MySQL username"`
+	Pass string `long:"pass" description:"MySQL password"`
 }
 
 type Parser struct {
-	conf  Options
-	wg    sync.WaitGroup
-	nower Nower
+	conf     Options
+	wg       sync.WaitGroup
+	nower    Nower
+	hostedOn string
 }
 
 type Nower interface {
@@ -83,15 +95,53 @@ type SlowQuery struct {
 	LockTime        float64   `json:"lock_time"`
 	RowsSent        int       `json:"rows_sent"`
 	RowsExamined    int       `json:"rows_examined"`
-	Query           string    `json:"query",omitempty`
+	Query           string    `json:"query,omitempty"`
 	NormalizedQuery string    `json:"normalized_query,omitempty"`
 	DB              string    `json:"db,omitempty"`
+	HostedOn        string    `json:"hosted_on,omitempty"`
 	skipQuery       bool
 }
 
-func (p *Parser) Init(_ interface{}) error {
+func (p *Parser) Init(options interface{}) error {
+	p.conf = *options.(*Options)
 	p.nower = &RealNower{}
+	if len(p.conf.Host) > 0 {
+		p.hostedOn = getHostedOn(p.conf.Host, p.conf.User, p.conf.Pass)
+	}
 	return nil
+}
+
+func getHostedOn(host, user, pass string) string {
+	url := fmt.Sprintf("%s:%s@tcp(%s)/", user, pass, host)
+	db, err := sql.Open("mysql", url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	rows, err := db.Query("SHOW GLOBAL VARIABLES like 'basedir';")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	var varName, value string
+
+	for rows.Next() {
+		if err := rows.Scan(&varName, &value); err != nil {
+			log.Fatal(err)
+		}
+		if strings.HasPrefix(value, "/rdsdbbin/") {
+			return rdsStr
+		}
+	}
+
+	// TODO: implement ec2 detection
+
+	if err = rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+	return selfStr
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
@@ -129,6 +179,7 @@ func (p *Parser) handleEvents(rawEvents <-chan rawEvent, send chan<- event.Event
 	defer p.wg.Done()
 	for rawE := range rawEvents {
 		sq := p.handleEvent(rawE)
+		sq.HostedOn = p.hostedOn
 		ev, err := p.processSlowQuery(sq)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
@@ -242,5 +293,6 @@ func (s SlowQuery) mapify() map[string]interface{} {
 		"rows_examined":    s.RowsExamined,
 		"query":            s.Query,
 		"normalized_query": s.NormalizedQuery,
+		"hosted_on":        s.HostedOn,
 	}
 }
