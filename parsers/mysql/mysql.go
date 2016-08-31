@@ -130,7 +130,8 @@ func (p *Parser) Init(options interface{}) error {
 func getReadOnly(db *sql.DB) bool {
 	rows, err := db.Query("SELECT @@global.read_only;")
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return false
 	}
 	defer rows.Close()
 
@@ -138,10 +139,12 @@ func getReadOnly(db *sql.DB) bool {
 
 	rows.Next()
 	if err := rows.Scan(&value); err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return false
 	}
 	if err := rows.Err(); err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return false
 	}
 	return value
 }
@@ -149,7 +152,8 @@ func getReadOnly(db *sql.DB) bool {
 func getHostedOn(db *sql.DB) string {
 	rows, err := db.Query("SHOW GLOBAL VARIABLES WHERE Variable_name = 'basedir';")
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return ""
 	}
 	defer rows.Close()
 
@@ -157,7 +161,8 @@ func getHostedOn(db *sql.DB) string {
 
 	for rows.Next() {
 		if err := rows.Scan(&varName, &value); err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			return ""
 		}
 		if strings.HasPrefix(value, "/rdsdbbin/") {
 			return rdsStr
@@ -166,8 +171,9 @@ func getHostedOn(db *sql.DB) string {
 
 	// TODO: implement ec2 detection
 
-	if err = rows.Err(); err != nil {
-		log.Fatal(err)
+	if err := rows.Err(); err != nil {
+		log.Println(err)
+		return ""
 	}
 	return selfStr
 }
