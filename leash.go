@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -33,6 +32,9 @@ func run(options GlobalOptions) {
 		// block on send should be true so if we can't send fast enough, we slow
 		// down reading the log rather than drop lines.
 		BlockOnSend: true,
+		// block on response is true so that if we hit rate limiting we make sure
+		// to re-enqueue all dropped events
+		BlockOnResponse: true,
 	}
 	if err := libhoney.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
@@ -66,15 +68,21 @@ func run(options GlobalOptions) {
 	toBeSent := make(chan event.Event)
 	doneSending := make(chan bool)
 
+	// two channels to handle backing off when rate limited and resending failed
+	// send attempts that are recoverable
+	toBeResent := make(chan event.Event, 2*options.NumSenders)
+	// time in milliseconds to delay the send
+	delaySending := make(chan int, 2*options.NumSenders)
+
 	// apply any filters to the events before they get sent
 	modifiedToBeSent := modifyEventContents(toBeSent, options)
 
 	// start up the sender
-	go sendToLibhoney(modifiedToBeSent, doneSending)
+	go sendToLibhoney(modifiedToBeSent, toBeResent, delaySending, doneSending)
 
 	// start a goroutine that reads from responses and logs.
 	responses := libhoney.Responses()
-	go handleResponses(responses, options)
+	go handleResponses(responses, toBeResent, delaySending, options)
 
 	// ProcessLines won't return until lines is closed
 	parser.ProcessLines(lines, toBeSent)
@@ -188,41 +196,85 @@ func addEventField(field string, toBeSent chan event.Event) chan event.Event {
 
 // sendToLibhoney reads from the toBeSent channel and shoves the events into
 // libhoney events, sending them on their way.
-func sendToLibhoney(toBeSent chan event.Event, doneSending chan bool) {
-	for ev := range toBeSent {
-		libhEv := libhoney.NewEvent()
-		libhEv.Metadata = rand.Intn(1000000)
-		libhEv.Timestamp = ev.Timestamp
-		if err := libhEv.Add(ev.Data); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"event": ev,
-				"error": err,
-			}).Error("Unexpected error adding data to libhoney event")
+func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
+	delaySending chan int, doneSending chan bool) {
+	for {
+		// check and see if we need to back off the API because of rate limiting
+		select {
+		case delay := <-delaySending:
+			time.Sleep(time.Duration(delay) * time.Millisecond)
+		default:
 		}
-		if err := libhEv.Send(); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"event": ev,
-				"error": err,
-			}).Error("Unexpected error event to libhoney send")
+		// if we have events to retransmit, send those first
+		select {
+		case ev := <-toBeResent:
+			sendEvent(ev)
+			continue
+		default:
 		}
+		// otherwise pick something up off the regular queue and send it
+		select {
+		case ev, ok := <-toBeSent:
+			if !ok {
+				// channel is closed
+				// NOTE: any unrtransmitted retransmittable events will be dropped
+				doneSending <- true
+				return
+			}
+			sendEvent(ev)
+			continue
+		default:
+		}
+		// no events at all? chill for a sec until we get the next one
+		time.Sleep(100 * time.Millisecond)
 	}
-	doneSending <- true
+}
+
+// sendEvent does the actual handoff to libhoney
+func sendEvent(ev event.Event) {
+	libhEv := libhoney.NewEvent()
+	libhEv.Metadata = ev
+	libhEv.Timestamp = ev.Timestamp
+	if err := libhEv.Add(ev.Data); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"event": ev,
+			"error": err,
+		}).Error("Unexpected error adding data to libhoney event")
+	}
+	if err := libhEv.Send(); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"event": ev,
+			"error": err,
+		}).Error("Unexpected error event to libhoney send")
+	}
 }
 
 // handleResponses reads from the response queue, logging a summary and debug
-func handleResponses(responses chan libhoney.Response, options GlobalOptions) {
+// re-enqueues any events that failed to send in a retryable way
+func handleResponses(responses chan libhoney.Response,
+	toBeResent chan event.Event, delaySending chan int,
+	options GlobalOptions) {
 	stats := newResponseStats()
 	go logStats(stats, options.StatusInterval)
 
 	for rsp := range responses {
 		stats.update(rsp)
-		logrus.WithFields(logrus.Fields{
-			"event_id":    rsp.Metadata,
+		logfields := logrus.Fields{
 			"status_code": rsp.StatusCode,
 			"body":        strings.TrimSpace(string(rsp.Body)),
 			"duration":    rsp.Duration,
 			"error":       rsp.Err,
-		}).Debug("event sent")
+			"timestamp":   rsp.Metadata.(event.Event).Timestamp,
+		}
+		// if this is an error we should retry sending, re-enqueue the event
+		if options.BackOff && (rsp.StatusCode == 429 || rsp.StatusCode == 500) {
+			logfields["retry_send"] = true
+			delaySending <- 100                      // back off for 100ms
+			toBeResent <- rsp.Metadata.(event.Event) // then retry sending the event
+		} else {
+			logfields["retry_send"] = false
+		}
+		logrus.WithFields(logfields).Debug("event send record received")
 	}
 }
 
