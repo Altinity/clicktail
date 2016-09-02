@@ -1,8 +1,6 @@
 package mongodb
 
 import (
-	"errors"
-	"math/rand"
 	"reflect"
 	"testing"
 	"time"
@@ -10,52 +8,32 @@ import (
 	"github.com/honeycombio/honeytail/event"
 )
 
-const commonLogFormatTimeLayout = "02/Jan/2006:15:04:05 -0700"
-
 type testLineMaps struct {
 	line string
-	resp map[string]interface{}
 	ev   event.Event
 }
 
-type FakeLineParser struct {
-	tlm []testLineMaps
-}
-
-func (f *FakeLineParser) ParseLogLine(line string) (map[string]interface{}, error) {
-	for _, lm := range f.tlm {
-		if line == lm.line {
-			return lm.resp, nil
-		}
-	}
-	return nil, errors.New("line not found in test slice")
-}
-
 func TestProcessLines(t *testing.T) {
-	rand.Seed(5) // set a fixed seed so the tests are predictable with randomTime
-	t1, _ := time.Parse(commonLogFormatTimeLayout, "28/Dec/2009:01:38:56 +0000")
+	t1, _ := time.Parse(iso8601UTCTimeFormat, "2010-01-02T12:34:56.000Z")
 	tlm := []testLineMaps{
 		{
-			line: "test case 1",
-			resp: map[string]interface{}{
-				"query": "foobar",
-				"key2":  "val2",
-			},
+			line: "2010-01-02T12:34:56.000Z I CONTROL [conn123456789] git version fooooooo",
 			ev: event.Event{
 				Timestamp: t1,
 				Data: map[string]interface{}{
-					"query": "foobar",
-					"key2":  "val2",
+					"severity":  "informational",
+					"component": "CONTROL",
+					"context":   "conn123456789",
+					"message":   "git version fooooooo",
 				},
 			},
 		},
 	}
 	m := &Parser{
-		conf:  Options{},
-		nower: &FakeNower{},
-		lineParser: &FakeLineParser{
-			tlm: tlm,
-		},
+		conf:            Options{},
+		nower:           &FakeNower{},
+		timeStampFormat: iso8601UTCTimeFormat,
+		lineParser:      &MongoLineParser{},
 	}
 	lines := make(chan string)
 	send := make(chan event.Event)
@@ -69,11 +47,26 @@ func TestProcessLines(t *testing.T) {
 	// spin up the processor to process our test lines
 	go m.ProcessLines(lines, send)
 	for _, pair := range tlm {
-		resp := <-send
-		if !reflect.DeepEqual(resp, pair.ev) {
-			t.Fatalf("line resp didn't match up for %s. Expected %+v, actual: %+v",
+		ev := <-send
+
+		equals := true
+		if len(ev.Data) != len(pair.ev.Data) {
+			equals = false
+		}
+		if equals && ev.Timestamp != pair.ev.Timestamp {
+			equals = false
+		}
+		for k := range ev.Data {
+			if !reflect.DeepEqual(ev.Data[k], pair.ev.Data[k]) {
+				equals = false
+				break
+			}
+		}
+
+		if !equals {
+			t.Fatalf("line ev didn't match up for %s. Expected %+v, actual: %+v",
 				// pair.line, string(pair.ev.Blob), string(resp.Blob))
-				pair.line, pair.ev, resp)
+				pair.line, pair.ev, ev)
 		}
 	}
 }
@@ -81,6 +74,6 @@ func TestProcessLines(t *testing.T) {
 type FakeNower struct{}
 
 func (f *FakeNower) Now() time.Time {
-	fakeTime, _ := time.Parse(commonLogFormatTimeLayout, "02/Jan/2010:12:34:56 -0000")
+	fakeTime, _ := time.Parse(iso8601UTCTimeFormat, "2010-10-02T12:34:56.000Z")
 	return fakeTime
 }
