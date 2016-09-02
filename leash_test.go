@@ -189,8 +189,8 @@ func TestSampleRate(t *testing.T) {
 	ts.rsp.reset()
 	run(opts)
 	// setting a sample rate of 20 and a rand seed of 1, 49 requests.
-	testEquals(t, ts.rsp.reqCounter, 49)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json996"}`)
+	testEquals(t, ts.rsp.reqCounter, 55)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json978"}`)
 	sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "20")
 }
