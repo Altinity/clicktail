@@ -3,6 +3,7 @@ package mysql
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -65,11 +66,13 @@ type Options struct {
 }
 
 type Parser struct {
-	conf     Options
-	wg       sync.WaitGroup
-	nower    Nower
-	hostedOn string
-	readOnly bool
+	conf       Options
+	wg         sync.WaitGroup
+	nower      Nower
+	hostedOn   string
+	readOnly   bool
+	replicaLag int64
+	role       string
 }
 
 type Nower interface {
@@ -102,6 +105,8 @@ type SlowQuery struct {
 	DB              string    `json:"db,omitempty"`
 	HostedOn        string    `json:"hosted_on,omitempty"`
 	ReadOnly        bool      `json:"read_only,omitempty"`
+	ReplicaLag      int64     `json:"replica_lag,omitempty"`
+	Role            string    `json:"role,omitempty"`
 	skipQuery       bool
 }
 
@@ -121,6 +126,8 @@ func (p *Parser) Init(options interface{}) error {
 			for _ = range ticker.C {
 				p.hostedOn = getHostedOn(db)
 				p.readOnly = getReadOnly(db)
+				p.replicaLag = getReplicaLag(db)
+				p.role = getRole(db)
 			}
 		}()
 	}
@@ -178,6 +185,58 @@ func getHostedOn(db *sql.DB) string {
 	return selfStr
 }
 
+func getReplicaLag(db *sql.DB) int64 {
+	rows, err := db.Query("SHOW SLAVE STATUS")
+	if err != nil {
+		log.Println(err)
+		return -1
+	}
+	if !rows.Next() {
+		log.Println(errors.New("No slave status"))
+		return -1
+	}
+	defer rows.Close()
+
+	columns, _ := rows.Columns()
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		var v sql.RawBytes
+		values[i] = &v
+	}
+
+	err = rows.Scan(values...)
+	if err != nil {
+		log.Println(err)
+		return -1
+	}
+
+	for i, name := range columns {
+		bp := values[i].(*sql.RawBytes)
+		vs := string(*bp)
+		if name == "Seconds_Behind_Master" {
+			vi, err := strconv.ParseInt(vs, 10, 64)
+			if err != nil {
+				return -1
+			}
+			return vi
+		}
+	}
+	return -1
+}
+
+func getRole(db *sql.DB) string {
+	rows, err := db.Query("SHOW MASTER STATUS")
+	if err != nil {
+		log.Println(err)
+		return "unknown"
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return "secondary"
+	}
+	return "primary"
+}
+
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan rawEvent)
@@ -215,6 +274,8 @@ func (p *Parser) handleEvents(rawEvents <-chan rawEvent, send chan<- event.Event
 		sq := p.handleEvent(rawE)
 		sq.HostedOn = p.hostedOn
 		sq.ReadOnly = p.readOnly
+		sq.ReplicaLag = p.replicaLag
+		sq.Role = p.role
 		ev, err := p.processSlowQuery(sq)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
@@ -330,5 +391,7 @@ func (s SlowQuery) mapify() map[string]interface{} {
 		"normalized_query": s.NormalizedQuery,
 		"hosted_on":        s.HostedOn,
 		"read_only":        s.ReadOnly,
+		"replica_lag":      s.ReplicaLag,
+		"role":             s.Role,
 	}
 }
