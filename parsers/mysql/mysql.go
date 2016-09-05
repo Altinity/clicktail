@@ -119,15 +119,17 @@ func (p *Parser) Init(options interface{}) error {
 		if err != nil {
 			log.Fatal(err)
 		}
+		// run one time queries
+		p.hostedOn = getHostedOn(db)
+		p.role = getRole(db)
+
 		// update hostedOn and readOnly every <n> seconds
 		go func() {
 			defer db.Close()
 			ticker := time.NewTicker(time.Second * time.Duration(p.conf.QueryInterval))
 			for _ = range ticker.C {
-				p.hostedOn = getHostedOn(db)
 				p.readOnly = getReadOnly(db)
 				p.replicaLag = getReplicaLag(db)
-				p.role = getRole(db)
 			}
 		}()
 	}
