@@ -40,6 +40,7 @@ type GlobalOptions struct {
 	NumSenders     uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to Honeycomb" default:"10"`
 	Debug          bool `long:"debug" description:"Print debugging output"`
 	StatusInterval uint `long:"status_interval" description:"how frequently, in seconds, to print out summary info" default:"60"`
+	BackOff        bool `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped."`
 
 	ScrubFields []string `long:"scrub_field" description:"for the field listed, apply a one-way hash to the field content. May be specified multiple times"`
 	DropFields  []string `long:"drop_field" description:"do not send the field to Honeycomb. May be specified multiple times"`
