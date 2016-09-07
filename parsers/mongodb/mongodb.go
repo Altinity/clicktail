@@ -16,6 +16,8 @@ const (
 	ctimeNoMSTimeFormat    = "Mon Jan _2 15:04:05"
 	iso8601UTCTimeFormat   = "2006-01-02T15:04:05Z"
 	iso8601LocalTimeFormat = "2006-01-02T15:04:05.999999999-0700"
+
+	timestampFieldName = "timestamp"
 )
 
 var timestampFormats = []string{iso8601LocalTimeFormat, iso8601UTCTimeFormat, ctimeNoMSTimeFormat, ctimeTimeFormat}
@@ -50,7 +52,7 @@ func (p *Parser) Init(options interface{}) error {
 
 func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error) {
 	now := p.nower.Now()
-	timestamp_value, ok := values["timestamp"].(string)
+	timestamp_value, ok := values[timestampFieldName].(string)
 	if ok {
 		var err error
 		for _, f := range timestampFormats {
@@ -98,7 +100,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 
 			// we'll be putting the timestamp in the Event
 			// itself, no need to also have it in the Data
-			delete(values, "timestamp")
+			delete(values, timestampFieldName)
 
 			send <- event.Event{
 				Timestamp: timestamp,
