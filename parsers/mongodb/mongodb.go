@@ -54,7 +54,8 @@ func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error
 	if ok {
 		var err error
 		for _, f := range timestampFormats {
-			timestamp, err := time.Parse(f, timestamp_value)
+			var timestamp time.Time
+			timestamp, err = time.Parse(f, timestamp_value)
 			if err == nil {
 				if f == ctimeTimeFormat || f == ctimeNoMSTimeFormat {
 					// these formats lacks the year, so we check

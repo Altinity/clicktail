@@ -30,10 +30,9 @@ func TestProcessLines(t *testing.T) {
 		},
 	}
 	m := &Parser{
-		conf:            Options{},
-		nower:           &FakeNower{},
-		timeStampFormat: iso8601UTCTimeFormat,
-		lineParser:      &MongoLineParser{},
+		conf:       Options{},
+		nower:      &FakeNower{},
+		lineParser: &MongoLineParser{},
 	}
 	lines := make(chan string)
 	send := make(chan event.Event)
