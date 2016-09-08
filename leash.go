@@ -20,7 +20,7 @@ import (
 
 // actually go and be leashy
 func run(options GlobalOptions) {
-	logrus.Info("Starting leash")
+	logrus.Info("Starting honeytail")
 
 	// spin up our transmission to send events to Honeycomb
 	libhConfig := libhoney.Config{
@@ -96,6 +96,7 @@ func run(options GlobalOptions) {
 	libhoney.Close()
 
 	// Nothing bad happened, yay
+	logrus.Info("Honeytail is all done, goodbye!")
 }
 
 // getParserOptions takes a parser name and the global options struct

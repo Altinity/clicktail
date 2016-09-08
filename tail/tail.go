@@ -129,12 +129,17 @@ func tailMultipleFiles(conf Config, filePath string, lines chan string, wg *sync
 	if err != nil {
 		return err
 	}
+	if len(files) > 1 {
+		// when tailing multiple files, force the default statefile use
+		conf.Options.StateFile = ""
+	}
 	for _, file := range files {
 		var realStateFile string
 		if conf.Options.StateFile == "" {
-			// force statefile to match globbed file
 			baseName := strings.TrimSuffix(file, ".log")
 			realStateFile = baseName + ".leash.state"
+		} else {
+			realStateFile = conf.Options.StateFile
 		}
 		if err := tailSingleFile(conf, file, realStateFile, lines, wg); err != nil {
 			return err
@@ -175,7 +180,7 @@ func tailSingleFile(conf Config, file string, stateFile string, lines chan strin
 		ReOpen:    reOpen, // keep reading on rotation, aka tail -F
 		MustExist: true,   // fail if log file doesn't exist
 		Follow:    follow, // don't stop at EOF, aka tail -f
-		Logger:    logrus.New(),
+		Logger:    tail.DiscardingLogger,
 		Poll:      conf.Options.Poll, // use poll instead of inotify
 	}
 	logrus.WithFields(logrus.Fields{
