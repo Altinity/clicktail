@@ -281,6 +281,10 @@ func handleResponses(responses chan libhoney.Response,
 // logStats dumps and resets the stats once every minute
 func logStats(stats *responseStats, interval uint) {
 	logrus.Debugf("Initializing stats reporting. Will print stats once/%d seconds", interval)
+	if interval == 0 {
+		// interval of 0 means don't print summary status
+		return
+	}
 	ticker := time.NewTicker(time.Second * time.Duration(interval))
 	for range ticker.C {
 		stats.logAndReset()
