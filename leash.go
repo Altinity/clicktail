@@ -134,6 +134,9 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 	for _, field := range options.AddFields {
 		toBeSent = addEventField(field, toBeSent)
 	}
+	for _, field := range options.RequestShape {
+		toBeSent = requestShape(field, toBeSent, options)
+	}
 	return toBeSent
 }
 
@@ -187,6 +190,62 @@ func addEventField(field string, toBeSent chan event.Event) chan event.Event {
 	go func() {
 		for ev := range toBeSent {
 			ev.Data[key] = val
+			newSent <- ev
+		}
+		close(newSent)
+	}()
+	return newSent
+}
+
+// requestShape expects the field passed in to have the form
+// VERB /path/of/request HTTP/1.x
+// If it does, it will break it apart into components, normalize the URL,
+// and add a handful of additional fields based on what it finds.
+func requestShape(field string, toBeSent chan event.Event, options GlobalOptions) chan event.Event {
+	logrus.WithFields(logrus.Fields{
+		"field": field,
+	}).Debug("spinning up request shaper")
+	newSent := make(chan event.Event)
+	var prefix string
+	if options.ShapePrefix != "" {
+		prefix = options.ShapePrefix + "_"
+	}
+	go func() {
+		for ev := range toBeSent {
+			if val, ok := ev.Data[field]; ok {
+				// start by splitting out method, uri, and version
+				parts := strings.Split(val.(string), " ")
+				if len(parts) != 3 {
+					// field didn't match expected "VERB /path/ Version"
+					// send it through unmodified
+					newSent <- ev
+					continue
+				}
+				// report all three parts
+				ev.Data[prefix+field+"_method"] = parts[0]
+				ev.Data[prefix+field+"_uri"] = parts[1]
+				ev.Data[prefix+field+"_protocol_version"] = parts[2]
+				// next up, split apart the path from the query string
+				uriQuery := strings.SplitN(parts[1], "?", 2)
+				ev.Data[prefix+field+"_path"] = uriQuery[0]
+				if len(uriQuery) > 1 {
+					ev.Data[prefix+field+"_query"] = uriQuery[1]
+				}
+				// break up the query string into key=val pairs
+				if len(uriQuery) > 1 {
+					pairs := strings.Split(uriQuery[1], "&")
+					for _, pair := range pairs {
+						pairParts := strings.Split(pair, "=")
+						if len(pairParts) != 2 {
+							// this pair doesnt' have a key=val pair
+							continue // continues for _, pair loop
+						}
+						key := pairParts[0]
+						val := pairParts[1]
+						ev.Data[prefix+field+"_query_"+key] = val
+					}
+				}
+			}
 			newSent <- ev
 		}
 		close(newSent)
