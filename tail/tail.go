@@ -129,12 +129,17 @@ func tailMultipleFiles(conf Config, filePath string, lines chan string, wg *sync
 	if err != nil {
 		return err
 	}
+	if len(files) > 1 {
+		// when tailing multiple files, force the default statefile use
+		conf.Options.StateFile = ""
+	}
 	for _, file := range files {
 		var realStateFile string
 		if conf.Options.StateFile == "" {
-			// force statefile to match globbed file
 			baseName := strings.TrimSuffix(file, ".log")
 			realStateFile = baseName + ".leash.state"
+		} else {
+			realStateFile = conf.Options.StateFile
 		}
 		if err := tailSingleFile(conf, file, realStateFile, lines, wg); err != nil {
 			return err
