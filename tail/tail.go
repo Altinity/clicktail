@@ -180,7 +180,7 @@ func tailSingleFile(conf Config, file string, stateFile string, lines chan strin
 		ReOpen:    reOpen, // keep reading on rotation, aka tail -F
 		MustExist: true,   // fail if log file doesn't exist
 		Follow:    follow, // don't stop at EOF, aka tail -f
-		Logger:    logrus.New(),
+		Logger:    tail.DiscardingLogger,
 		Poll:      conf.Options.Poll, // use poll instead of inotify
 	}
 	logrus.WithFields(logrus.Fields{
