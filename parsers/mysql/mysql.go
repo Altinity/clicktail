@@ -43,7 +43,7 @@ import (
 var (
 	reTime       = myRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
 	reAdminPing  = myRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
-	reUser       = myRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^ ]+) @ (?P<host>[^ ]+).*$")}
+	reUser       = myRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+).*$")}
 	reQueryStats = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+) *$")}
 	reSetTime    = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery      = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
@@ -93,7 +93,7 @@ type SlowQuery struct {
 	Timestamp       time.Time `json:"time"`
 	UnixTime        int       `json:"unixtime"`
 	User            string    `json:"user"`
-	Host            string    `json:"host"`
+	Client          string    `json:"client"`
 	QueryTime       float64   `json:"query_time"`
 	LockTime        float64   `json:"lock_time"`
 	RowsSent        int       `json:"rows_sent"`
@@ -105,6 +105,7 @@ type SlowQuery struct {
 	ReadOnly        *bool     `json:"read_only,omitempty"`
 	ReplicaLag      *int64    `json:"replica_lag,omitempty"`
 	Role            *string   `json:"role,omitempty"`
+	ClientIP        string    `json:"client_ip,omitempty"`
 	skipQuery       bool
 }
 
@@ -329,8 +330,10 @@ func (p *Parser) handleEvent(rawE rawEvent) SlowQuery {
 			sq.skipQuery = true
 		case reUser.MatchString(line):
 			matchGroups := reUser.FindStringSubmatchMap(line)
-			sq.User = matchGroups["user"]
-			sq.Host = matchGroups["host"]
+			sq.User = strings.Split(matchGroups["user"], "[")[0]
+			hostAndIP := strings.Split(matchGroups["host"], " ")
+			sq.Client = hostAndIP[0]
+			sq.ClientIP = hostAndIP[1][1 : len(hostAndIP[1])-1]
 		case reQueryStats.MatchString(line):
 			matchGroups := reQueryStats.FindStringSubmatchMap(line)
 			sq.QueryTime, err = strconv.ParseFloat(matchGroups["queryTime"], 64)
@@ -396,7 +399,8 @@ func (s SlowQuery) mapify() map[string]interface{} {
 		"time":             s.Timestamp,
 		"unixtime":         s.UnixTime,
 		"user":             s.User,
-		"host":             s.Host,
+		"client":           s.Client,
+		"client_ip":        s.ClientIP,
 		"query_time":       s.QueryTime,
 		"lock_time":        s.LockTime,
 		"rows_sent":        s.RowsSent,

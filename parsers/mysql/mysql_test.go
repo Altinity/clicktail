@@ -36,13 +36,27 @@ var sqds = []slowQueryData{
 		rawE: rawEvent{
 			lines: []string{
 				"# Time: not-a-parsable-time-stampZ",
+				"# User@Host: someuser[root] @ hostfoo [192.168.2.1]  Id:   666",
+			},
+		},
+		sq: SlowQuery{
+			Timestamp: t2,
+			User:      "someuser[root]",
+			Client:    "hostfoo",
+			ClientIP:  "192.168.2.1",
+		},
+	},
+	{
+		rawE: rawEvent{
+			lines: []string{
+				"# Time: not-a-parsable-time-stampZ",
 				"# User@Host: root[root] @ localhost []  Id:   233",
 			},
 		},
 		sq: SlowQuery{
 			Timestamp: t2,
 			User:      "root[root]",
-			Host:      "localhost",
+			Client:    "localhost",
 		},
 	},
 	{
