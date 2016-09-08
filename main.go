@@ -45,7 +45,7 @@ type GlobalOptions struct {
 	ScrubFields  []string `long:"scrub_field" description:"for the field listed, apply a one-way hash to the field content. May be specified multiple times"`
 	DropFields   []string `long:"drop_field" description:"do not send the field to Honeycomb. May be specified multiple times"`
 	AddFields    []string `long:"add_field" description:"add the field to every event. Field should be key=val. May be specified multiple times"`
-	RequestShape []string `long:"request_shape" description:"identify a field that contains an HTTP request of the form "METHOD /path HTTP/1.x". Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
+	RequestShape []string `long:"request_shape" description:"identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x'. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
 	ShapePrefix  string   `long:"shape_prefix" description:"prefix to use on fields generated from request_shape to prevent field collision"`
 
 	Reqs  RequiredOptions `group:"Required Options"`
