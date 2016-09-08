@@ -3,6 +3,7 @@ package mongodb
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -17,7 +18,11 @@ const (
 	iso8601UTCTimeFormat   = "2006-01-02T15:04:05Z"
 	iso8601LocalTimeFormat = "2006-01-02T15:04:05.999999999-0700"
 
-	timestampFieldName = "timestamp"
+	timestampFieldName  = "timestamp"
+	namespaceFieldName  = "namespace"
+	databaseFieldName   = "database"
+	collectionFieldName = "collection"
+	locksFieldName      = "locks"
 )
 
 var timestampFormats = []string{iso8601LocalTimeFormat, iso8601UTCTimeFormat, ctimeNoMSTimeFormat, ctimeTimeFormat}
@@ -48,6 +53,45 @@ func (p *Parser) Init(options interface{}) error {
 	p.nower = &RealNower{}
 	p.lineParser = &MongoLineParser{}
 	return nil
+}
+
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+	for line := range lines {
+		values, err := p.lineParser.ParseLogLine(line)
+		// we get a bunch of errors from the parser on mongo logs, skip em
+		if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
+			timestamp, err := p.parseTimestamp(values)
+			if err != nil {
+				logFailure(line, err, "couldn't parse logline timestamp, skipping")
+				continue
+			}
+			if err = p.decomposeNamespace(values); err != nil {
+				logFailure(line, err, "couldn't decompose logline namespace, skipping")
+				continue
+			}
+			if err = p.decomposeLocks(values); err != nil {
+				logFailure(line, err, "couldn't decompose logline locks, skipping")
+				continue
+			}
+
+			logrus.WithFields(logrus.Fields{
+				"line":   line,
+				"values": values,
+			}).Debug("Successfully parsed line")
+
+			// we'll be putting the timestamp in the Event
+			// itself, no need to also have it in the Data
+			delete(values, timestampFieldName)
+
+			send <- event.Event{
+				Timestamp: timestamp,
+				Data:      values,
+			}
+		} else {
+			logFailure(line, err, "logline didn't parse, skipping.")
+		}
+	}
+	logrus.Debug("lines channel is closed, ending mongo processor")
 }
 
 func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error) {
@@ -81,38 +125,50 @@ func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error
 	return time.Time{}, errors.New("timestamp missing from logline")
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
-	for line := range lines {
-		values, err := p.lineParser.ParseLogLine(line)
-		// we get a bunch of errors from the parser on mongo logs, skip em
-		if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
-			timestamp, err := p.parseTimestamp(values)
-			if err != nil {
-				logrus.WithFields(logrus.Fields{
-					"line": line,
-				}).WithError(err).Debug("couldn't parse logline timestamp, skipping.")
+func (p *Parser) decomposeNamespace(values map[string]interface{}) error {
+	ns_value, ok := values[namespaceFieldName]
+	if !ok {
+		return nil
+	}
+
+	decomposed := strings.SplitN(ns_value.(string), ".", 2)
+	if len(decomposed) < 2 {
+		return nil
+	}
+	values[databaseFieldName] = decomposed[0]
+	values[collectionFieldName] = decomposed[1]
+	return nil
+}
+
+func (p *Parser) decomposeLocks(values map[string]interface{}) error {
+	locks_value, ok := values[locksFieldName]
+	if !ok {
+		return nil
+	}
+	locks_map, ok := locks_value.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	for k, v := range locks_map {
+		v_map, ok := v.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for attrKey, attrVal := range v_map {
+			attrVal_map, ok := attrVal.(map[string]interface{})
+			if !ok {
 				continue
 			}
-			logrus.WithFields(logrus.Fields{
-				"line":   line,
-				"values": values,
-			}).Debug("Successfully parsed line")
-
-			// we'll be putting the timestamp in the Event
-			// itself, no need to also have it in the Data
-			delete(values, timestampFieldName)
-
-			send <- event.Event{
-				Timestamp: timestamp,
-				Data:      values,
+			for lockType, lockCount := range attrVal_map {
+				values[k+"_"+lockType+"lock_"+attrKey] = lockCount
 			}
-		} else {
-			logrus.WithFields(logrus.Fields{
-				"line": line,
-			}).WithError(err).Debug("logline didn't parse, skipping.")
 		}
 	}
-	logrus.Debug("lines channel is closed, ending mongo processor")
+	return nil
+}
+
+func logFailure(line string, err error, msg string) {
+	logrus.WithFields(logrus.Fields{"line": line}).WithError(err).Warnln(msg)
 }
 
 type Nower interface {

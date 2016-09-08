@@ -14,10 +14,36 @@ type testLineMaps struct {
 }
 
 func TestProcessLines(t *testing.T) {
-	t1, _ := time.Parse(iso8601UTCTimeFormat, "2010-01-02T12:34:56.000Z")
+	time_string1 := "2010-01-02T12:34:56.000Z"
+	t1, _ := time.Parse(iso8601UTCTimeFormat, time_string1)
+
+	locks_string1 := "locks:{ Global: { acquireCount: { r: 2, w: 2 } }, Database: { acquireCount: { w: 2 } }, Collection: { acquireCount: { w: 1 } }, oplog: { acquireCount: { w: 1 } } }"
+	locks1 := map[string]interface{}{
+		"Global": map[string]interface{}{
+			"acquireCount": map[string]interface{}{
+				"r": float64(2),
+				"w": float64(2),
+			},
+		},
+		"Database": map[string]interface{}{
+			"acquireCount": map[string]interface{}{
+				"w": float64(2),
+			},
+		},
+		"Collection": map[string]interface{}{
+			"acquireCount": map[string]interface{}{
+				"w": float64(1),
+			},
+		},
+		"oplog": map[string]interface{}{
+			"acquireCount": map[string]interface{}{
+				"w": float64(1),
+			},
+		},
+	}
 	tlm := []testLineMaps{
 		{
-			line: "2010-01-02T12:34:56.000Z I CONTROL [conn123456789] git version fooooooo",
+			line: time_string1 + " I CONTROL [conn123456789] git version fooooooo",
 			ev: event.Event{
 				Timestamp: t1,
 				Data: map[string]interface{}{
@@ -25,6 +51,31 @@ func TestProcessLines(t *testing.T) {
 					"component": "CONTROL",
 					"context":   "conn123456789",
 					"message":   "git version fooooooo",
+				},
+			},
+		},
+
+		{
+			line: time_string1 + " I QUERY    [context12345] query database.collection:Stuff query: {} " + locks_string1 + " 0ms",
+			ev: event.Event{
+				Timestamp: t1,
+				Data: map[string]interface{}{
+					"severity":                      "informational",
+					"component":                     "QUERY",
+					"context":                       "context12345",
+					"operation":                     "query",
+					"namespace":                     "database.collection:Stuff",
+					"database":                      "database",         // decomposed from namespace
+					"collection":                    "collection:Stuff", // decomposed from namespace
+					"query":                         map[string]interface{}{},
+					"query_shape":                   "{  }",
+					"locks":                         locks1,
+					"Global_rlock_acquireCount":     float64(2),
+					"Global_wlock_acquireCount":     float64(2),
+					"Database_wlock_acquireCount":   float64(2),
+					"Collection_wlock_acquireCount": float64(1),
+					"oplog_wlock_acquireCount":      float64(1),
+					"duration_ms":                   float64(0),
 				},
 			},
 		},
