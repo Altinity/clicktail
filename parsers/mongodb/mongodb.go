@@ -149,7 +149,7 @@ func (p *Parser) decomposeLocks(values map[string]interface{}) error {
 	if !ok {
 		return nil
 	}
-	for k, v := range locks_map {
+	for scope, v := range locks_map {
 		v_map, ok := v.(map[string]interface{})
 		if !ok {
 			continue
@@ -160,7 +160,17 @@ func (p *Parser) decomposeLocks(values map[string]interface{}) error {
 				continue
 			}
 			for lockType, lockCount := range attrVal_map {
-				values[k+"_"+lockType+"lock_"+attrKey] = lockCount
+				if lockType == "r" {
+					lockType = "read"
+				} else if lockType == "w" {
+					lockType = "write"
+				}
+
+				if attrKey == "acquireCount" {
+					values[strings.ToLower(scope)+"_"+lockType+"_lock"] = lockCount
+				} else if attrKey == "acquireWaitCount" {
+					values[strings.ToLower(scope)+"_"+lockType+"_lock_wait"] = lockCount
+				}
 			}
 		}
 	}

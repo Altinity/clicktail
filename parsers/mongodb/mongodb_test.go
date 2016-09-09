@@ -60,22 +60,22 @@ func TestProcessLines(t *testing.T) {
 			ev: event.Event{
 				Timestamp: t1,
 				Data: map[string]interface{}{
-					"severity":                      "informational",
-					"component":                     "QUERY",
-					"context":                       "context12345",
-					"operation":                     "query",
-					"namespace":                     "database.collection:Stuff",
-					"database":                      "database",         // decomposed from namespace
-					"collection":                    "collection:Stuff", // decomposed from namespace
-					"query":                         map[string]interface{}{},
-					"query_shape":                   "{  }",
-					"locks":                         locks1,
-					"Global_rlock_acquireCount":     float64(2),
-					"Global_wlock_acquireCount":     float64(2),
-					"Database_wlock_acquireCount":   float64(2),
-					"Collection_wlock_acquireCount": float64(1),
-					"oplog_wlock_acquireCount":      float64(1),
-					"duration_ms":                   float64(0),
+					"severity":              "informational",
+					"component":             "QUERY",
+					"context":               "context12345",
+					"operation":             "query",
+					"namespace":             "database.collection:Stuff",
+					"database":              "database",         // decomposed from namespace
+					"collection":            "collection:Stuff", // decomposed from namespace
+					"query":                 map[string]interface{}{},
+					"normalized_query":      "{  }",
+					"locks":                 locks1,
+					"global_read_lock":      float64(2),
+					"global_write_lock":     float64(2),
+					"database_write_lock":   float64(2),
+					"collection_write_lock": float64(1),
+					"oplog_write_lock":      float64(1),
+					"duration_ms":           float64(0),
 				},
 			},
 		},
