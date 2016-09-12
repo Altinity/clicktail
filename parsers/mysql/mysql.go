@@ -12,7 +12,6 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/percona/go-mysql/query"
 
 	"github.com/honeycombio/honeytail/event"
 )
@@ -353,7 +352,7 @@ func (p *Parser) handleEvent(rawE rawEvent) SlowQuery {
 		case reQuery.MatchString(line):
 			matchGroups := reQuery.FindStringSubmatchMap(line)
 			sq.Query = matchGroups["query"]
-			sq.NormalizedQuery = query.Fingerprint(sq.Query)
+			sq.NormalizedQuery = ""
 		default:
 			// unknown row; log and skip
 			logrus.WithFields(logrus.Fields{
