@@ -2,6 +2,8 @@
 package mysql
 
 import (
+	"database/sql"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	_ "github.com/go-sql-driver/mysql"
 
 	"github.com/honeycombio/honeytail/event"
 )
@@ -39,21 +42,34 @@ import (
 var (
 	reTime       = myRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
 	reAdminPing  = myRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
-	reUser       = myRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^ ]+) @ (?P<host>[^ ]+).*$")}
+	reUser       = myRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+).*$")}
 	reQueryStats = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+) *$")}
 	reSetTime    = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery      = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
+	reUse        = myRegexp{regexp.MustCompile("^(?i)use ")}
+
+	rdsStr  = "rds"
+	ec2Str  = "ec2"
+	selfStr = "self"
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
 
 type Options struct {
+	Host          string `long:"host" description:"MySQL host in the format (address:port)"`
+	User          string `long:"user" description:"MySQL username"`
+	Pass          string `long:"pass" description:"MySQL password"`
+	QueryInterval uint   `long:"interval" description:"interval for querying the MySQL DB in seconds" default:"30"`
 }
 
 type Parser struct {
-	conf  Options
-	wg    sync.WaitGroup
-	nower Nower
+	conf       Options
+	wg         sync.WaitGroup
+	nower      Nower
+	hostedOn   *string
+	readOnly   *bool
+	replicaLag *int64
+	role       *string
 }
 
 type Nower interface {
@@ -76,19 +92,163 @@ type SlowQuery struct {
 	Timestamp       time.Time `json:"time"`
 	UnixTime        int       `json:"unixtime"`
 	User            string    `json:"user"`
-	Host            string    `json:"host"`
+	Client          string    `json:"client"`
 	QueryTime       float64   `json:"query_time"`
 	LockTime        float64   `json:"lock_time"`
 	RowsSent        int       `json:"rows_sent"`
 	RowsExamined    int       `json:"rows_examined"`
-	Query           string    `json:"query",omitempty`
+	Query           string    `json:"query,omitempty"`
 	NormalizedQuery string    `json:"normalized_query,omitempty"`
+	DB              string    `json:"db,omitempty"`
+	HostedOn        *string   `json:"hosted_on,omitempty"`
+	ReadOnly        *bool     `json:"read_only,omitempty"`
+	ReplicaLag      *int64    `json:"replica_lag,omitempty"`
+	Role            *string   `json:"role,omitempty"`
+	ClientIP        string    `json:"client_ip,omitempty"`
 	skipQuery       bool
 }
 
-func (p *Parser) Init(_ interface{}) error {
+func (p *Parser) Init(options interface{}) error {
+	p.conf = *options.(*Options)
 	p.nower = &RealNower{}
+	if p.conf.Host != "" {
+		url := fmt.Sprintf("%s:%s@tcp(%s)/", p.conf.User, p.conf.Pass, p.conf.Host)
+		db, err := sql.Open("mysql", url)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		// run one time queries
+		hostedOn, err := getHostedOn(db)
+		if err != nil {
+			logrus.WithError(err).Warn("failed to get host env")
+		}
+		p.hostedOn = hostedOn
+
+		role, err := getRole(db)
+		if err != nil {
+			logrus.WithError(err).Warn("failed to get role")
+		}
+		p.role = role
+
+		// update hostedOn and readOnly every <n> seconds
+		go func() {
+			defer db.Close()
+			ticker := time.NewTicker(time.Second * time.Duration(p.conf.QueryInterval))
+			for _ = range ticker.C {
+				readOnly, err := getReadOnly(db)
+				if err != nil {
+					logrus.WithError(err).Warn("failed to get read-only state")
+				}
+				p.readOnly = readOnly
+
+				replicaLag, err := getReplicaLag(db)
+				if err != nil {
+					logrus.WithError(err).Warn("failed to get replica lag")
+				}
+				p.replicaLag = replicaLag
+			}
+		}()
+	}
 	return nil
+}
+
+func getReadOnly(db *sql.DB) (*bool, error) {
+	rows, err := db.Query("SELECT @@global.read_only;")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var value bool
+
+	rows.Next()
+	if err := rows.Scan(&value); err != nil {
+		logrus.WithError(err).Warn("failed to get read-only state")
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		logrus.WithError(err).Warn("failed to get read-only state")
+		return nil, err
+	}
+	return &value, nil
+}
+
+func getHostedOn(db *sql.DB) (*string, error) {
+	rows, err := db.Query("SHOW GLOBAL VARIABLES WHERE Variable_name = 'basedir';")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var varName, value string
+
+	for rows.Next() {
+		if err := rows.Scan(&varName, &value); err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(value, "/rdsdbbin/") {
+			return &rdsStr, nil
+		}
+	}
+
+	// TODO: implement ec2 detection
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func getReplicaLag(db *sql.DB) (*int64, error) {
+	rows, err := db.Query("SHOW SLAVE STATUS")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, err
+	}
+
+	columns, _ := rows.Columns()
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		var v sql.RawBytes
+		values[i] = &v
+	}
+
+	err = rows.Scan(values...)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, name := range columns {
+		bp := values[i].(*sql.RawBytes)
+		vs := string(*bp)
+		if name == "Seconds_Behind_Master" {
+			vi, err := strconv.ParseInt(vs, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			return &vi, nil
+		}
+	}
+	return nil, nil
+}
+
+func getRole(db *sql.DB) (*string, error) {
+	var res string
+	rows, err := db.Query("SHOW MASTER STATUS")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		res = "secondary"
+		return nil, err
+	}
+	res = "primary"
+	return &res, nil
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
@@ -126,6 +286,10 @@ func (p *Parser) handleEvents(rawEvents <-chan rawEvent, send chan<- event.Event
 	defer p.wg.Done()
 	for rawE := range rawEvents {
 		sq := p.handleEvent(rawE)
+		sq.HostedOn = p.hostedOn
+		sq.ReadOnly = p.readOnly
+		sq.ReplicaLag = p.replicaLag
+		sq.Role = p.role
 		ev, err := p.processSlowQuery(sq)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
@@ -165,20 +329,30 @@ func (p *Parser) handleEvent(rawE rawEvent) SlowQuery {
 			sq.skipQuery = true
 		case reUser.MatchString(line):
 			matchGroups := reUser.FindStringSubmatchMap(line)
-			sq.User = matchGroups["user"]
-			sq.Host = matchGroups["host"]
+			sq.User = strings.Split(matchGroups["user"], "[")[0]
+			hostAndIP := strings.Split(matchGroups["host"], " ")
+			sq.Client = hostAndIP[0]
+			sq.ClientIP = hostAndIP[1][1 : len(hostAndIP[1])-1]
 		case reQueryStats.MatchString(line):
 			matchGroups := reQueryStats.FindStringSubmatchMap(line)
 			sq.QueryTime, err = strconv.ParseFloat(matchGroups["queryTime"], 64)
 			sq.LockTime, err = strconv.ParseFloat(matchGroups["lockTime"], 64)
 			sq.RowsSent, err = strconv.Atoi(matchGroups["rowsSent"])
 			sq.RowsExamined, err = strconv.Atoi(matchGroups["rowsExamined"])
+		case reUse.FindString(line) != "":
+			db := strings.TrimPrefix(line, reUse.FindString(line))
+			db = strings.TrimRight(db, ";")
+			db = strings.Trim(db, "`")
+			sq.DB = db
+			// Use this line as the query unless, if a real query follows it will be replaced.
+			sq.Query = line
 		case reSetTime.MatchString(line):
 			matchGroups := reSetTime.FindStringSubmatchMap(line)
 			sq.UnixTime, err = strconv.Atoi(matchGroups["unixTime"])
 		case reQuery.MatchString(line):
 			matchGroups := reQuery.FindStringSubmatchMap(line)
 			sq.Query = matchGroups["query"]
+			sq.NormalizedQuery = ""
 		default:
 			// unknown row; log and skip
 			logrus.WithFields(logrus.Fields{
@@ -220,11 +394,12 @@ func (p *Parser) processSlowQuery(sq SlowQuery) (event.Event, error) {
 }
 
 func (s SlowQuery) mapify() map[string]interface{} {
-	return map[string]interface{}{
+	mapped := map[string]interface{}{
 		"time":             s.Timestamp,
 		"unixtime":         s.UnixTime,
 		"user":             s.User,
-		"host":             s.Host,
+		"client":           s.Client,
+		"client_ip":        s.ClientIP,
 		"query_time":       s.QueryTime,
 		"lock_time":        s.LockTime,
 		"rows_sent":        s.RowsSent,
@@ -232,4 +407,17 @@ func (s SlowQuery) mapify() map[string]interface{} {
 		"query":            s.Query,
 		"normalized_query": s.NormalizedQuery,
 	}
+	if s.HostedOn != nil {
+		mapped["hosted_on"] = *s.HostedOn
+	}
+	if s.ReadOnly != nil {
+		mapped["read_only"] = *s.ReadOnly
+	}
+	if s.ReplicaLag != nil {
+		mapped["replica_lag"] = *s.ReplicaLag
+	}
+	if s.Role != nil {
+		mapped["role"] = *s.Role
+	}
+	return mapped
 }
