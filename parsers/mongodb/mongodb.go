@@ -178,7 +178,7 @@ func (p *Parser) decomposeLocks(values map[string]interface{}) error {
 }
 
 func logFailure(line string, err error, msg string) {
-	logrus.WithFields(logrus.Fields{"line": line}).WithError(err).Warnln(msg)
+	logrus.WithFields(logrus.Fields{"line": line}).WithError(err).Debugln(msg)
 }
 
 type Nower interface {
