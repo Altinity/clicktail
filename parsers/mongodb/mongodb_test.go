@@ -47,10 +47,11 @@ func TestProcessLines(t *testing.T) {
 			ev: event.Event{
 				Timestamp: t1,
 				Data: map[string]interface{}{
-					"severity":  "informational",
-					"component": "CONTROL",
-					"context":   "conn123456789",
-					"message":   "git version fooooooo",
+					"severity":      "informational",
+					"component":     "CONTROL",
+					"context":       "conn123456789",
+					"message":       "git version fooooooo",
+					"read_or_write": "",
 				},
 			},
 		},
@@ -76,6 +77,59 @@ func TestProcessLines(t *testing.T) {
 					"collection_write_lock": float64(1),
 					"oplog_write_lock":      float64(1),
 					"duration_ms":           float64(0),
+					"read_or_write":         "read",
+				},
+			},
+		},
+
+		{
+			line: time_string1 + " I WRITE    [context12345] insert database.collection:Stuff query: {} " + locks_string1 + " 0ms",
+			ev: event.Event{
+				Timestamp: t1,
+				Data: map[string]interface{}{
+					"severity":              "informational",
+					"component":             "WRITE",
+					"context":               "context12345",
+					"operation":             "insert",
+					"namespace":             "database.collection:Stuff",
+					"database":              "database",         // decomposed from namespace
+					"collection":            "collection:Stuff", // decomposed from namespace
+					"query":                 map[string]interface{}{},
+					"normalized_query":      "{  }",
+					"locks":                 locks1,
+					"global_read_lock":      float64(2),
+					"global_write_lock":     float64(2),
+					"database_write_lock":   float64(2),
+					"collection_write_lock": float64(1),
+					"oplog_write_lock":      float64(1),
+					"duration_ms":           float64(0),
+					"read_or_write":         "write",
+				},
+			},
+		},
+
+		{
+			line: time_string1 + " I COMMAND    [context12345] command database.$cmd command: insert { } " + locks_string1 + " 0ms",
+			ev: event.Event{
+				Timestamp: t1,
+				Data: map[string]interface{}{
+					"severity":              "informational",
+					"component":             "COMMAND",
+					"context":               "context12345",
+					"operation":             "command",
+					"namespace":             "database.$cmd",
+					"database":              "database", // decomposed from namespace
+					"collection":            "$cmd",     // decomposed from namespace
+					"command_type":          "insert",
+					"command":               map[string]interface{}{},
+					"locks":                 locks1,
+					"global_read_lock":      float64(2),
+					"global_write_lock":     float64(2),
+					"database_write_lock":   float64(2),
+					"collection_write_lock": float64(1),
+					"oplog_write_lock":      float64(1),
+					"duration_ms":           float64(0),
+					"read_or_write":         "write",
 				},
 			},
 		},
