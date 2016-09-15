@@ -35,6 +35,10 @@ func run(options GlobalOptions) {
 		// block on response is true so that if we hit rate limiting we make sure
 		// to re-enqueue all dropped events
 		BlockOnResponse: true,
+
+		// limit pending work capacity so that we get backpressure from libhoney
+		// and block instead of sleeping inside sendToLibHoney.
+		PendingWorkCapacity: 5 * options.NumSenders,
 	}
 	if err := libhoney.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
@@ -77,8 +81,16 @@ func run(options GlobalOptions) {
 	// apply any filters to the events before they get sent
 	modifiedToBeSent := modifyEventContents(toBeSent, options)
 
+	realToBeSent := make(chan event.Event, 10*options.NumSenders)
+	go func() {
+		for ev := range modifiedToBeSent {
+			realToBeSent <- ev
+		}
+		close(realToBeSent)
+	}()
+
 	// start up the sender
-	go sendToLibhoney(modifiedToBeSent, toBeResent, delaySending, doneSending)
+	go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending)
 
 	// start a goroutine that reads from responses and logs.
 	responses := libhoney.Responses()
