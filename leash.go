@@ -38,7 +38,7 @@ func run(options GlobalOptions) {
 
 		// limit pending work capacity so that we get backpressure from libhoney
 		// and block instead of sleeping inside sendToLibHoney.
-		PendingWorkCapacity: 5 * options.NumSenders,
+		PendingWorkCapacity: 20 * options.NumSenders,
 	}
 	if err := libhoney.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
@@ -341,8 +341,8 @@ func handleResponses(responses chan libhoney.Response,
 		// if this is an error we should retry sending, re-enqueue the event
 		if options.BackOff && (rsp.StatusCode == 429 || rsp.StatusCode == 500) {
 			logfields["retry_send"] = true
-			delaySending <- 100                      // back off for 100ms
-			toBeResent <- rsp.Metadata.(event.Event) // then retry sending the event
+			delaySending <- 1000 / int(options.NumSenders) // back off for a little bit
+			toBeResent <- rsp.Metadata.(event.Event)       // then retry sending the event
 		} else {
 			logfields["retry_send"] = false
 		}
