@@ -20,11 +20,12 @@ const (
 	iso8601UTCTimeFormat   = "2006-01-02T15:04:05.000Z"
 	iso8601LocalTimeFormat = "2006-01-02T15:04:05.000-0700"
 
-	timestampFieldName  = "timestamp"
-	namespaceFieldName  = "namespace"
-	databaseFieldName   = "database"
-	collectionFieldName = "collection"
-	locksFieldName      = "locks"
+	timestampFieldName   = "timestamp"
+	namespaceFieldName   = "namespace"
+	databaseFieldName    = "database"
+	collectionFieldName  = "collection"
+	locksFieldName       = "locks"
+	locksMicrosFieldName = "locks(micros)"
 )
 
 var timestampFormats = []string{
@@ -80,6 +81,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 				logFailure(line, err, "couldn't decompose logline locks, skipping")
 				continue
 			}
+			if err = p.decomposeLocksMicros(values); err != nil {
+				logFailure(line, err, "couldn't decompose logline locks(micros), skipping")
+				continue
+			}
 
 			if q, ok := values["query"].(map[string]interface{}); ok {
 				if _, ok = values["normalized_query"]; !ok {
@@ -87,8 +92,6 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 					values["normalized_query"] = queryshape.GetQueryShape(q)
 				}
 			}
-
-			p.classifyReadOrWrite(values)
 
 			logrus.WithFields(logrus.Fields{
 				"line":   line,
@@ -108,53 +111,6 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 		}
 	}
 	logrus.Debug("lines channel is closed, ending mongo processor")
-}
-
-var commandReadOrWrite map[string]string = map[string]string{
-	"aggregate":         "read",
-	"bulkWrite":         "write",
-	"count":             "read",
-	"copyTo":            "read-write",
-	"deleteOne":         "write",
-	"deleteMany":        "write",
-	"distinct":          "read",
-	"find":              "read",
-	"findAndModify":     "read-write",
-	"findOne":           "read",
-	"findOneAndDelete":  "read-write",
-	"findOneAndReplace": "read-write",
-	"findOneAndUpdate":  "read-write",
-	"group":             "read",
-	"insert":            "write",
-	"insertOne":         "write",
-	"insertMany":        "write",
-	"mapReduce":         "read", /* can target a document, so read-write? */
-	"replaceOne":        "write",
-	"remove":            "write",
-	"update":            "write",
-	"updateOne":         "write",
-	"updateMany":        "write",
-}
-
-func (p *Parser) classifyReadOrWrite(values map[string]interface{}) {
-	// determine if this log line represents a read or write
-	// operation.  not "operation" in the sense of the "operation"
-	// field, but in the data direction.
-	if operation, ok := values["operation"].(string); ok {
-		readOrWrite := ""
-		if operation == "query" {
-			readOrWrite = "read"
-		} else if operation == "insert" {
-			readOrWrite = "write"
-		} else if operation == "command" {
-			if commandType, ok := values["command_type"].(string); ok {
-				if commandRW, ok := commandReadOrWrite[commandType]; ok {
-					readOrWrite = commandRW
-				}
-			}
-		}
-		values["read_or_write"] = readOrWrite
-	}
 }
 
 func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error) {
@@ -225,8 +181,12 @@ func (p *Parser) decomposeLocks(values map[string]interface{}) error {
 			for lockType, lockCount := range attrVal_map {
 				if lockType == "r" {
 					lockType = "read"
+				} else if lockType == "R" {
+					lockType = "Read"
 				} else if lockType == "w" {
 					lockType = "write"
+				} else if lockType == "w" {
+					lockType = "Write"
 				}
 
 				if attrKey == "acquireCount" {
@@ -237,6 +197,33 @@ func (p *Parser) decomposeLocks(values map[string]interface{}) error {
 			}
 		}
 	}
+	delete(values, locksFieldName)
+	return nil
+}
+
+func (p *Parser) decomposeLocksMicros(values map[string]interface{}) error {
+	locks_value, ok := values[locksMicrosFieldName]
+	if !ok {
+		return nil
+	}
+	locks_map, ok := locks_value.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	for lockType, lockDuration := range locks_map {
+		if lockType == "r" {
+			lockType = "read"
+		} else if lockType == "R" {
+			lockType = "Read"
+		} else if lockType == "w" {
+			lockType = "write"
+		} else if lockType == "w" {
+			lockType = "Write"
+		}
+
+		values[lockType+"_lock_held_us"] = lockDuration
+	}
+	delete(values, locksMicrosFieldName)
 	return nil
 }
 

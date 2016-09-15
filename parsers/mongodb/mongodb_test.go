@@ -36,29 +36,6 @@ type processed struct {
 
 func TestProcessLines(t *testing.T) {
 	locks_string1 := "locks:{ Global: { acquireCount: { r: 2, w: 2 } }, Database: { acquireCount: { w: 2 } }, Collection: { acquireCount: { w: 1 } }, oplog: { acquireCount: { w: 1 } } }"
-	locks1 := map[string]interface{}{
-		"Global": map[string]interface{}{
-			"acquireCount": map[string]interface{}{
-				"r": float64(2),
-				"w": float64(2),
-			},
-		},
-		"Database": map[string]interface{}{
-			"acquireCount": map[string]interface{}{
-				"w": float64(2),
-			},
-		},
-		"Collection": map[string]interface{}{
-			"acquireCount": map[string]interface{}{
-				"w": float64(1),
-			},
-		},
-		"oplog": map[string]interface{}{
-			"acquireCount": map[string]interface{}{
-				"w": float64(1),
-			},
-		},
-	}
 	tlm := []struct {
 		line     string
 		expected processed
@@ -90,7 +67,6 @@ func TestProcessLines(t *testing.T) {
 					"collection":            "collection:Stuff", // decomposed from namespace
 					"query":                 map[string]interface{}{},
 					"normalized_query":      "{  }",
-					"locks":                 locks1,
 					"global_read_lock":      float64(2),
 					"global_write_lock":     float64(2),
 					"database_write_lock":   float64(2),
@@ -115,7 +91,6 @@ func TestProcessLines(t *testing.T) {
 					"collection":            "collection:Stuff", // decomposed from namespace
 					"query":                 map[string]interface{}{},
 					"normalized_query":      "{  }",
-					"locks":                 locks1,
 					"global_read_lock":      float64(2),
 					"global_write_lock":     float64(2),
 					"database_write_lock":   float64(2),
@@ -143,7 +118,6 @@ func TestProcessLines(t *testing.T) {
 					"collection":            "$cmd",     // decomposed from namespace
 					"command_type":          "insert",
 					"command":               map[string]interface{}{},
-					"locks":                 locks1,
 					"global_read_lock":      float64(2),
 					"global_write_lock":     float64(2),
 					"database_write_lock":   float64(2),
@@ -212,11 +186,9 @@ func TestProcessLines(t *testing.T) {
 				time: UBUNTU_3_2_9_UPDATE_TIME,
 				includeData: map[string]interface{}{
 					"severity":              "informational",
-					"operation":             "command",
-					"command_type":          "update",
+					"operation":             "update",
 					"namespace":             "protecteddb.comedy",
 					"keyUpdates":            0.0,
-					"reslen":                245.0,
 					"global_read_lock":      1.0,
 					"global_write_lock":     1.0,
 					"database_write_lock":   1.0,
