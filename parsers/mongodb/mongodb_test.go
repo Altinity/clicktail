@@ -209,6 +209,9 @@ func TestProcessLines(t *testing.T) {
 				time: UBUNTU_2_4_FIND_TIME.AddDate(nower.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
 					"operation": "query",
+					"locks(micros)": map[string]int64{
+						"r": 60,
+					},
 				},
 			},
 		},
