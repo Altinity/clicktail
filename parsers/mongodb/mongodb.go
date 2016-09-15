@@ -8,6 +8,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/honeycombio/mongodbtools/logparser"
+	queryshape "github.com/honeycombio/mongodbtools/queryshape"
 
 	"github.com/honeycombio/honeytail/event"
 )
@@ -80,6 +81,15 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 				continue
 			}
 
+			if q, ok := values["query"].(map[string]interface{}); ok {
+				if _, ok = values["normalized_query"]; !ok {
+					// also calculate the query_shape if we can
+					values["normalized_query"] = queryshape.GetQueryShape(q)
+				}
+			}
+
+			p.classifyReadOrWrite(values)
+
 			logrus.WithFields(logrus.Fields{
 				"line":   line,
 				"values": values,
@@ -98,6 +108,53 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 		}
 	}
 	logrus.Debug("lines channel is closed, ending mongo processor")
+}
+
+var commandReadOrWrite map[string]string = map[string]string{
+	"aggregate":         "read",
+	"bulkWrite":         "write",
+	"count":             "read",
+	"copyTo":            "read-write",
+	"deleteOne":         "write",
+	"deleteMany":        "write",
+	"distinct":          "read",
+	"find":              "read",
+	"findAndModify":     "read-write",
+	"findOne":           "read",
+	"findOneAndDelete":  "read-write",
+	"findOneAndReplace": "read-write",
+	"findOneAndUpdate":  "read-write",
+	"group":             "read",
+	"insert":            "write",
+	"insertOne":         "write",
+	"insertMany":        "write",
+	"mapReduce":         "read", /* can target a document, so read-write? */
+	"replaceOne":        "write",
+	"remove":            "write",
+	"update":            "write",
+	"updateOne":         "write",
+	"updateMany":        "write",
+}
+
+func (p *Parser) classifyReadOrWrite(values map[string]interface{}) {
+	// determine if this log line represents a read or write
+	// operation.  not "operation" in the sense of the "operation"
+	// field, but in the data direction.
+	if operation, ok := values["operation"].(string); ok {
+		readOrWrite := ""
+		if operation == "query" {
+			readOrWrite = "read"
+		} else if operation == "insert" {
+			readOrWrite = "write"
+		} else if operation == "command" {
+			if commandType, ok := values["command_type"].(string); ok {
+				if commandRW, ok := commandReadOrWrite[commandType]; ok {
+					readOrWrite = commandRW
+				}
+			}
+		}
+		values["read_or_write"] = readOrWrite
+	}
 }
 
 func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error) {
