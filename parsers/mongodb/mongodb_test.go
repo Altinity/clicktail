@@ -25,7 +25,7 @@ var (
 	UBUNTU_3_2_9_FIND_TIME, _   = time.Parse(iso8601LocalTimeFormat, "2016-09-15T00:01:55.387+0000")
 	UBUNTU_3_2_9_UPDATE_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-14T23:36:36.793+0000")
 	UBUNTU_2_4_FIND_TIME, _     = time.Parse(ctimeTimeFormat, "Tue Sep 13 21:10:33.961")
-	OSX_3_2_9_AGGREGATE_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-14T14:46:13.879-0700 ")
+	OSX_3_2_9_AGGREGATE_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-14T14:46:13.879-0700")
 )
 
 type processed struct {
@@ -35,6 +35,7 @@ type processed struct {
 }
 
 func TestProcessLines(t *testing.T) {
+	nower := &FakeNower{}
 	locks_string1 := "locks:{ Global: { acquireCount: { r: 2, w: 2 } }, Database: { acquireCount: { w: 2 } }, Collection: { acquireCount: { w: 1 } }, oplog: { acquireCount: { w: 1 } } }"
 	tlm := []struct {
 		line     string
@@ -205,9 +206,9 @@ func TestProcessLines(t *testing.T) {
 		{
 			line: UBUNTU_2_4_FIND,
 			expected: processed{
-				time: UBUNTU_2_4_FIND_TIME,
+				time: UBUNTU_2_4_FIND_TIME.AddDate(nower.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
-					"command_type": "query",
+					"operation": "query",
 				},
 			},
 		},
@@ -225,7 +226,7 @@ func TestProcessLines(t *testing.T) {
 	}
 	m := &Parser{
 		conf:       Options{},
-		nower:      &FakeNower{},
+		nower:      nower,
 		lineParser: &MongoLineParser{},
 	}
 	lines := make(chan string)
