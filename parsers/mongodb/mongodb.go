@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	ctimeTimeFormat        = "Mon Jan _2 15:04:05.000"
+	// https://github.com/rueckstiess/mongodb-log-spec#timestamps
 	ctimeNoMSTimeFormat    = "Mon Jan _2 15:04:05"
-	iso8601UTCTimeFormat   = "2006-01-02T15:04:05Z"
-	iso8601LocalTimeFormat = "2006-01-02T15:04:05.999999999-0700"
+	ctimeTimeFormat        = "Mon Jan _2 15:04:05.000"
+	iso8601UTCTimeFormat   = "2006-01-02T15:04:05.000Z"
+	iso8601LocalTimeFormat = "2006-01-02T15:04:05.000-0700"
 
 	timestampFieldName  = "timestamp"
 	namespaceFieldName  = "namespace"
@@ -25,7 +26,12 @@ const (
 	locksFieldName      = "locks"
 )
 
-var timestampFormats = []string{iso8601LocalTimeFormat, iso8601UTCTimeFormat, ctimeNoMSTimeFormat, ctimeTimeFormat}
+var timestampFormats = []string{
+	iso8601LocalTimeFormat,
+	iso8601UTCTimeFormat,
+	ctimeTimeFormat,
+	ctimeNoMSTimeFormat,
+}
 
 type Options struct {
 	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occured in the log line's message)."`
