@@ -13,6 +13,7 @@ const (
 	UBUNTU_3_2_9_INSERT = `2016-09-14T23:39:23.450+0000 I COMMAND  [conn68] command protecteddb.comedy command: insert { insert: "comedy", documents: [ { _id: ObjectId('57d9dfab9fc9998ce4e0c072'), name: "Bill & Ted's Excellent Adventure", year: 1989.0, extrakey: "benisawesome" } ], ordered: true } ninserted:1 keyUpdates:0 writeConflicts:0 numYields:0 reslen:25 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } protocol:op_command 0ms`
 	UBUNTU_3_2_9_FIND   = `2016-09-15T00:01:55.387+0000 I COMMAND [conn93] command protecteddb.comedy command: find { find: "comedy", filter: { $where: "this.year > 2000" } } planSummary: COLLSCAN keysExamined:0 docsExamined:5 cursorExhausted:1 keyUpdates:0 writeConflicts:0 numYields:0 nreturned:2 reslen:245 locks:{ Global: { acquireCount: { r: 7, w: 1 } }, Database: { acquireCount: { r: 3, w: 1 } }, Collection: { acquireCount: { r: 3, w: 1 } }, Metadata: { acquireCount: { W: 1 } } } protocol:op_command 29ms`
 	UBUNTU_3_2_9_UPDATE = `2016-09-14T23:36:36.793+0000 I WRITE [conn61] update protecteddb.comedy query: { name: "Hulk" } update: { $unset: { cast: 1.0 } } keysExamined:0 docsExamined:4 nMatched:0 nModified:0 keyUpdates:0 writeConflicts:0 numYields:0 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } 0ms`
+	UBUNTU_2_6_FIND     = `2016-09-15T02:38:10.395-0400 [conn1579035] query starfruit_production.users query: { $query: { altemails: { $in: [ "REDACTED@domain.org" ] } }, $orderby: { _id: 1 } } planSummary: IXSCAN { _id: 1 } ntoskip:0 nscanned:67439 nscannedObjects:67439 keyUpdates:0 numYields:1 locks(micros) r:114782 nreturned:0 reslen:20 105ms`
 	UBUNTU_2_4_FIND     = `Tue Sep 13 21:10:33.961 [TTLMonitor] query btest.system.indexes query: { expireAfterSeconds: { $exists: true } } ntoreturn:0 ntoskip:0 nscanned:1 keyUpdates:0 locks(micros) r:60 nreturned:0 reslen:20 0ms`
 	OSX_3_2_9_AGGREGATE = `2016-09-14T14:46:13.879-0700 I COMMAND [conn1] command testtest.zips command: aggregate { aggregate: "zips", pipeline: [ { $group: { _id: "$state", totalPop: { $sum: "$pop" } } }, { $match: { totalPop: { $gte: 10000000.0 } } } ], cursor: {} } keyUpdates:0 writeConflicts:0 numYields:229 reslen:342 locks:{ Global: { acquireCount: { r: 466 } }, Database: { acquireCount: { r: 233 } }, Collection: { acquireCount: { r: 233 } } } protocol:op_command 34ms`
 
@@ -25,6 +26,7 @@ var (
 	UBUNTU_3_2_9_FIND_TIME, _   = time.Parse(iso8601LocalTimeFormat, "2016-09-15T00:01:55.387+0000")
 	UBUNTU_3_2_9_UPDATE_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-14T23:36:36.793+0000")
 	UBUNTU_2_4_FIND_TIME, _     = time.Parse(ctimeTimeFormat, "Tue Sep 13 21:10:33.961")
+	UBUNTU_2_6_FIND_TIME, _     = time.Parse(iso8601LocalTimeFormat, "2016-09-15T02:38:10.395-0400")
 	OSX_3_2_9_AGGREGATE_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-14T14:46:13.879-0700")
 )
 
@@ -199,6 +201,26 @@ func TestProcessLines(t *testing.T) {
 				excludeKeys: []string{
 					"database_read_lock",
 					"oplog_write_lock",
+				},
+			},
+		},
+
+		{
+			line: UBUNTU_2_6_FIND,
+			expected: processed{
+				time: UBUNTU_2_6_FIND_TIME,
+				includeData: map[string]interface{}{
+					"operation": "query",
+					"context":   "conn1579035",
+					"namespace": "starfruit_production.users",
+					"locks(micros)": map[string]int64{
+						"r": 114782,
+					},
+					"duration_ms": 105.0,
+					"reslen":      20.0,
+					"nscanned":    67439.0,
+					"database":    "starfruit_production",
+					"collection":  "users",
 				},
 			},
 		},
