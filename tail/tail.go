@@ -204,7 +204,7 @@ func tailSingleFile(conf Config, file string, stateFile string, lines chan strin
 				// skip errored lines
 				continue
 			}
-			lines <- line.Text
+			lines <- strings.TrimSpace(line.Text)
 		}
 		wg.Done()
 	}()
