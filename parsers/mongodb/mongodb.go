@@ -206,7 +206,7 @@ func (p *Parser) decomposeLocksMicros(values map[string]interface{}) error {
 	if !ok {
 		return nil
 	}
-	locks_map, ok := locks_value.(map[string]interface{})
+	locks_map, ok := locks_value.(map[string]int64)
 	if !ok {
 		return nil
 	}

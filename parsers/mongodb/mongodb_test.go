@@ -210,17 +210,15 @@ func TestProcessLines(t *testing.T) {
 			expected: processed{
 				time: UBUNTU_2_6_FIND_TIME,
 				includeData: map[string]interface{}{
-					"operation": "query",
-					"context":   "conn1579035",
-					"namespace": "starfruit_production.users",
-					"locks(micros)": map[string]int64{
-						"r": 114782,
-					},
-					"duration_ms": 105.0,
-					"reslen":      20.0,
-					"nscanned":    67439.0,
-					"database":    "starfruit_production",
-					"collection":  "users",
+					"operation":         "query",
+					"context":           "conn1579035",
+					"namespace":         "starfruit_production.users",
+					"read_lock_held_us": int64(114782),
+					"duration_ms":       105.0,
+					"reslen":            20.0,
+					"nscanned":          67439.0,
+					"database":          "starfruit_production",
+					"collection":        "users",
 				},
 			},
 		},
@@ -230,10 +228,8 @@ func TestProcessLines(t *testing.T) {
 			expected: processed{
 				time: UBUNTU_2_4_FIND_TIME.AddDate(nower.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
-					"operation": "query",
-					"locks(micros)": map[string]int64{
-						"r": 60,
-					},
+					"operation":         "query",
+					"read_lock_held_us": int64(60),
 				},
 			},
 		},
