@@ -209,6 +209,8 @@ func (p *Parser) decomposeLocks(values map[string]interface{}) error {
 					values[strings.ToLower(scope)+"_"+lockType+"_lock"] = lockCount
 				} else if attrKey == "acquireWaitCount" {
 					values[strings.ToLower(scope)+"_"+lockType+"_lock_wait"] = lockCount
+				} else if attrKey == "timeAcquiringMicros" {
+					values[strings.ToLower(scope)+"_"+lockType+"_lock_wait_us"] = lockCount
 				}
 			}
 		}
