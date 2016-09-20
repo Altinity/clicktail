@@ -43,6 +43,8 @@ type Parser struct {
 	conf       Options
 	lineParser LineParser
 	nower      Nower
+
+	currentReplicaSet string
 }
 
 type LineParser interface {
@@ -91,6 +93,20 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 					// also calculate the query_shape if we can
 					values["normalized_query"] = queryshape.GetQueryShape(q)
 				}
+			}
+
+			if ns, ok := values["namespace"].(string); ok && ns == "admin.$cmd" {
+				if cmd_type, ok := values["command_type"]; ok && cmd_type == "replSetHeartbeat" {
+					if cmd, ok := values["command"].(map[string]interface{}); ok {
+						if replica_set, ok := cmd["replSetHeartbeat"].(string); ok {
+							p.currentReplicaSet = replica_set
+						}
+					}
+				}
+			}
+
+			if p.currentReplicaSet != "" {
+				values["replica_set"] = p.currentReplicaSet
 			}
 
 			logrus.WithFields(logrus.Fields{
