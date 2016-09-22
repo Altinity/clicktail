@@ -6,11 +6,7 @@
 
 honeytail is used to send log file data into Honeycomb.
 
-See https://honeycomb.io/docs/send-data/logs/ for the full documentation.
-
-## Download
-
-Download the latest version of honeytail from https://honeycomb.io/download/honeytail/latest
+See https://honeycomb.io/docs/send-data/agent/ for the full documentation and to download the latest version.
 
 ## Contributions
 
