@@ -17,6 +17,7 @@ const (
 	UBUNTU_2_4_FIND     = `Tue Sep 13 21:10:33.961 [TTLMonitor] query btest.system.indexes query: { expireAfterSeconds: { $exists: true } } ntoreturn:0 ntoskip:0 nscanned:1 keyUpdates:0 locks(micros) r:60 nreturned:0 reslen:20 0ms`
 	OSX_3_2_9_AGGREGATE = `2016-09-14T14:46:13.879-0700 I COMMAND [conn1] command testtest.zips command: aggregate { aggregate: "zips", pipeline: [ { $group: { _id: "$state", totalPop: { $sum: "$pop" } } }, { $match: { totalPop: { $gte: 10000000.0 } } } ], cursor: {} } keyUpdates:0 writeConflicts:0 numYields:229 reslen:342 locks:{ Global: { acquireCount: { r: 466 } }, Database: { acquireCount: { r: 233 } }, Collection: { acquireCount: { r: 233 } } } protocol:op_command 34ms`
 	HEARTBEAT           = `Sun Sep 18 07:20:03.246 [conn123456789] command admin.$cmd command: replSetHeartbeat { replSetHeartbeat: "replica-set-here", from: "host:port" } ntoreturn:1 keyUpdates:0 numYields:0  reslen:100 0ms`
+	NESTED_QUOTES       = `2016-09-20T14:55:06.189-0400 [conn2915444] update namespace.collection query: { _id: ObjectId('51abe5b6c') } update: { $set: { recent_data: [ { id: ObjectId('57e1860'), msg: "Nietzsche said "For what constitutes the tremendous historical uniqueness of that Persian is just the opposite of this."" } ] } } nscanned:1 nscannedObjects:1 nMatched:1 nModified:1 keyUpdates:0 numYields:0 locks(micros) w:393 0ms`
 	T1_STRING           = "2010-01-02T12:34:56.000Z"
 )
 
@@ -29,6 +30,7 @@ var (
 	UBUNTU_2_4_FIND_TIME, _     = time.Parse(ctimeTimeFormat, "Tue Sep 13 21:10:33.961")
 	UBUNTU_2_6_FIND_TIME, _     = time.Parse(iso8601LocalTimeFormat, "2016-09-15T02:38:10.395-0400")
 	OSX_3_2_9_AGGREGATE_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-14T14:46:13.879-0700")
+	NESTED_QUOTES_TIME, _       = time.Parse(iso8601LocalTimeFormat, "2016-09-20T14:55:06.189-0400")
 )
 
 type processed struct {
@@ -254,6 +256,17 @@ func TestProcessLines(t *testing.T) {
 				includeData: map[string]interface{}{
 					"duration_ms": 34.0,
 					"replica_set": "replica-set-here",
+				},
+				excludeKeys: []string{},
+			},
+		},
+
+		{
+			line: NESTED_QUOTES,
+			expected: processed{
+				time: NESTED_QUOTES_TIME,
+				includeData: map[string]interface{}{
+					"duration_ms": 0.0,
 				},
 				excludeKeys: []string{},
 			},
