@@ -3,11 +3,13 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/honeycombio/libhoney-go"
+	"github.com/honeycombio/urlshaper"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
@@ -223,41 +225,54 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 	if options.ShapePrefix != "" {
 		prefix = options.ShapePrefix + "_"
 	}
+	pr := urlshaper.Parser{}
+	for _, rpat := range options.RequestPattern {
+		pat := urlshaper.Pattern{Pat: rpat}
+		if err := pat.Compile(); err != nil {
+			logrus.WithField("request_pattern", rpat).WithError(err).Fatal(
+				"Failed to compile provided pattern.")
+		}
+		pr.Patterns = append(pr.Patterns, &pat)
+	}
 	go func() {
 		for ev := range toBeSent {
 			if val, ok := ev.Data[field]; ok {
 				// start by splitting out method, uri, and version
 				parts := strings.Split(val.(string), " ")
-				if len(parts) != 3 {
-					// field didn't match expected "VERB /path/ Version"
-					// send it through unmodified
+				var path string
+				if len(parts) == 3 {
+					// treat it as METHOD /path HTTP/1.X
+					ev.Data[prefix+field+"_method"] = parts[0]
+					ev.Data[prefix+field+"_protocol_version"] = parts[2]
+					path = parts[1]
+				} else {
+					// treat it as just the /path
+					path = parts[0]
+				}
+				// next up, get all the goodies out of the path
+				res, err := pr.Parse(path)
+				if err != nil {
+					// couldn't parse it, just pass along the event
 					newSent <- ev
 					continue
 				}
-				// report all three parts
-				ev.Data[prefix+field+"_method"] = parts[0]
-				ev.Data[prefix+field+"_uri"] = parts[1]
-				ev.Data[prefix+field+"_protocol_version"] = parts[2]
-				// next up, split apart the path from the query string
-				uriQuery := strings.SplitN(parts[1], "?", 2)
-				ev.Data[prefix+field+"_path"] = uriQuery[0]
-				if len(uriQuery) > 1 {
-					ev.Data[prefix+field+"_query"] = uriQuery[1]
-				}
-				// break up the query string into key=val pairs
-				if len(uriQuery) > 1 {
-					pairs := strings.Split(uriQuery[1], "&")
-					for _, pair := range pairs {
-						pairParts := strings.Split(pair, "=")
-						if len(pairParts) != 2 {
-							// this pair doesnt' have a key=val pair
-							continue // continues for _, pair loop
-						}
-						key := pairParts[0]
-						val := pairParts[1]
-						ev.Data[prefix+field+"_query_"+key] = val
+				ev.Data[prefix+field+"_uri"] = res.URI
+				ev.Data[prefix+field+"_path"] = res.Path
+				ev.Data[prefix+field+"_query"] = res.Query
+				for k, v := range res.QueryFields {
+					if len(v) == 0 {
+						ev.Data[prefix+field+"_query_"+k] = ""
+					} else if len(v) == 1 {
+						ev.Data[prefix+field+"_query_"+k] = v[0]
+					} else {
+						sort.Strings(v)
+						ev.Data[prefix+field+"_query_"+k] = strings.Join(v, ", ")
 					}
 				}
+				for k, v := range res.PathFields {
+					ev.Data[prefix+field+"_path_"+k] = v[0]
+				}
+				ev.Data[prefix+field+"_shape"] = res.Shape
 			}
 			newSent <- ev
 		}

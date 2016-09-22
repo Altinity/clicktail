@@ -17,6 +17,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
+	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/tail"
 )
 
@@ -164,6 +165,72 @@ func TestAddField(t *testing.T) {
 	opts.AddFields = []string{"newfield=newval", "second=new"}
 	run(opts)
 	testEquals(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval","second":"new"}`)
+}
+
+func TestRequestShapeRaw(t *testing.T) {
+	tbs := make(chan event.Event)
+	reqField := "request"
+	opts := defaultOptions
+	opts.RequestShape = []string{"request"}
+	opts.RequestPattern = []string{"/about", "/about/:lang", "/about/:lang/books"}
+	urls := map[string]map[string]interface{}{
+		"GET /about/en/books HTTP/1.1": {
+			"request_method":           "GET",
+			"request_protocol_version": "HTTP/1.1",
+			"request_uri":              "/about/en/books",
+			"request_path":             "/about/en/books",
+			"request_query":            "",
+			"request_path_lang":        "en",
+			"request_shape":            "/about/:lang/books",
+		},
+		"GET /about?foo=bar HTTP/1.0": {
+			"request_method":           "GET",
+			"request_protocol_version": "HTTP/1.0",
+			"request_uri":              "/about?foo=bar",
+			"request_path":             "/about",
+			"request_query":            "foo=bar",
+			"request_query_foo":        "bar",
+			"request_shape":            "/about?foo=?",
+		},
+		"/about/en/books": {
+			"request_uri":       "/about/en/books",
+			"request_path":      "/about/en/books",
+			"request_query":     "",
+			"request_path_lang": "en",
+			"request_shape":     "/about/:lang/books",
+		},
+		"/about/en?foo=bar": {
+			"request_uri":       "/about/en?foo=bar",
+			"request_path":      "/about/en",
+			"request_query":     "foo=bar",
+			"request_query_foo": "bar",
+			"request_path_lang": "en",
+			"request_shape":     "/about/:lang?foo=?",
+		},
+		"/about/en?foo=bar&baz&foo=bend&foo=alpha": {
+			"request_uri":       "/about/en?foo=bar&baz&foo=bend&foo=alpha",
+			"request_path":      "/about/en",
+			"request_query":     "foo=bar&baz&foo=bend&foo=alpha",
+			"request_query_foo": "alpha, bar, bend",
+			"request_path_lang": "en",
+			"request_shape":     "/about/:lang?baz=?&foo=?&foo=?&foo=?",
+		},
+	}
+	output := requestShape(reqField, tbs, opts)
+	for input, expectedResult := range urls {
+		ev := event.Event{
+			Data: map[string]interface{}{
+				reqField: input,
+			},
+		}
+		// feed it the sample event
+		tbs <- ev
+		// get the munged event out
+		res := <-output
+		for evKey, expectedVal := range expectedResult {
+			testEquals(t, res.Data[evKey], expectedVal)
+		}
+	}
 }
 
 func TestSampleRate(t *testing.T) {

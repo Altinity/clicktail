@@ -44,11 +44,12 @@ type GlobalOptions struct {
 	StatusInterval uint `long:"status_interval" description:"how frequently, in seconds, to print out summary info" default:"60"`
 	BackOff        bool `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped."`
 
-	ScrubFields  []string `long:"scrub_field" description:"for the field listed, apply a one-way hash to the field content. May be specified multiple times"`
-	DropFields   []string `long:"drop_field" description:"do not send the field to Honeycomb. May be specified multiple times"`
-	AddFields    []string `long:"add_field" description:"add the field to every event. Field should be key=val. May be specified multiple times"`
-	RequestShape []string `long:"request_shape" description:"identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x'. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
-	ShapePrefix  string   `long:"shape_prefix" description:"prefix to use on fields generated from request_shape to prevent field collision"`
+	ScrubFields    []string `long:"scrub_field" description:"for the field listed, apply a one-way hash to the field content. May be specified multiple times"`
+	DropFields     []string `long:"drop_field" description:"do not send the field to Honeycomb. May be specified multiple times"`
+	AddFields      []string `long:"add_field" description:"add the field to every event. Field should be key=val. May be specified multiple times"`
+	RequestShape   []string `long:"request_shape" description:"identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x' or just the request path. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
+	RequestPattern []string `long:"request_pattern" description:"a pattern for the request path on which to base the derived request_shape. May be specified multiple times. Patterns are considered in order; first match wins."`
+	ShapePrefix    string   `long:"shape_prefix" description:"prefix to use on fields generated from request_shape to prevent field collision"`
 
 	Reqs  RequiredOptions `group:"Required Options"`
 	Modes OtherModes      `group:"Other Modes"`
@@ -100,6 +101,7 @@ func main() {
 	handleOtherModes(flagParser, options)
 	addParserDefaultOptions(&options)
 	sanityCheckOptions(&options)
+
 	verifyWritekey(options)
 	run(options)
 }
