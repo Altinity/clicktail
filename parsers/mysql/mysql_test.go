@@ -2,126 +2,123 @@ package mysql
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
 
 type slowQueryData struct {
-	rawE rawEvent
-	sq   SlowQuery
+	rawE      []string
+	sq        SlowQuery
+	timestamp time.Time
 	// processSlowQuery will error
 	psqWillError bool
 }
 
+const (
+	hostLine  = "# User@Host: root[root] @ localhost [127.0.0.1]  Id:   136"
+	timerLine = "# Query_time: 0.000171  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0"
+	useLine   = "use honeycomb;"
+)
+
 var t1, _ = time.Parse("02/Jan/2006:15:04:05.000000", "01/Apr/2016:00:31:09.817887")
-var t2, _ = time.Parse("02/Jan/2006:15:04:05.000000", "02/Aug/2010:13:24:56")
+var tUnparseable, _ = time.Parse("02/Jan/2006:15:04:05.000000", "02/Aug/2010:13:24:56")
+
+// `Time` field has ms resolution but no time zone; `SET timestamp=` is UNIX timestamp but no ms resolution
+// e: mysql… i guess we could/should just combine the unix timestamp second and the parsed timestamp ms
+// justify parsing both
+// could be terrible
+
+func intptr(i int) *int           { return &i }
+func floatptr(f float64) *float64 { return &f }
+
 var sqds = []slowQueryData{
 	{
-		rawE: rawEvent{
-			lines: []string{
-				"# Time: 2016-04-01T00:31:09.817887Z",
-				"# Query_time: 0.008393  Lock_time: 0.000154 Rows_sent: 1  Rows_examined: 357",
-			},
+		rawE: []string{
+			"# Time: 2016-04-01T00:31:09.817887Z",
+			"# Query_time: 0.008393  Lock_time: 0.000154 Rows_sent: 1  Rows_examined: 357",
 		},
 		sq: SlowQuery{
-			Timestamp:    t1,
-			QueryTime:    0.008393,
-			LockTime:     0.000154,
-			RowsSent:     1,
-			RowsExamined: 357,
+			QueryTime:    floatptr(0.008393),
+			LockTime:     floatptr(0.000154),
+			RowsSent:     intptr(1),
+			RowsExamined: intptr(357),
 		},
-		psqWillError: false,
+		timestamp: t1,
 	},
 	{
-		rawE: rawEvent{
-			lines: []string{
-				"# Time: not-a-parsable-time-stampZ",
-				"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
-			},
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
 		},
 		sq: SlowQuery{
-			Timestamp: t2,
-			User:      "someuser",
-			Client:    "hostfoo",
-			ClientIP:  "192.168.2.1",
+			User:     "someuser",
+			Client:   "hostfoo",
+			ClientIP: "192.168.2.1",
 		},
+		timestamp: tUnparseable,
 	},
 	{
-		rawE: rawEvent{
-			lines: []string{
-				"# Time: not-a-parsable-time-stampZ",
-				"# User@Host: root @ localhost []  Id:   233",
-			},
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"# User@Host: root @ localhost []  Id:   233",
 		},
 		sq: SlowQuery{
-			Timestamp: t2,
-			User:      "root",
-			Client:    "localhost",
+			User:   "root",
+			Client: "localhost",
 		},
+		timestamp: tUnparseable,
 	},
 	{
-		rawE: rawEvent{
-			lines: []string{
-				"# Time: not-a-recognizable time stamp",
-				"# administrator command: Ping;",
-			},
+		rawE: []string{
+			"# Time: not-a-recognizable time stamp",
+			"# administrator command: Ping;",
 		},
 		sq: SlowQuery{
-			Timestamp: t2,
 			skipQuery: true,
 		},
+		timestamp:    tUnparseable,
 		psqWillError: true,
 	},
 	{
-		rawE: rawEvent{
-			lines: []string{
-				"# Time: not-a-parsable-time-stampZ",
-				"SET timestamp=1459470669;",
-				"show status like 'Uptime';",
-			},
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"SET timestamp=1459470669;",
+			"show status like 'Uptime';",
 		},
 		sq: SlowQuery{
-			Timestamp: t2,
-			UnixTime:  1459470669,
-			Query:     "show status like 'Uptime';",
+			Query: "show status like 'Uptime';",
 			//NormalizedQuery: "show status like ?;",
 		},
+		timestamp: t1.Truncate(time.Second),
 	},
 	{
-		rawE: rawEvent{
-			lines: []string{
-				"# Time: not-a-parsable-time-stampZ",
-				"SET timestamp=1459470669;",
-				"SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
-			},
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"SET timestamp=1459470669;",
+			"SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
 		},
 		sq: SlowQuery{
-			Timestamp: t2,
-			UnixTime:  1459470669,
-			Query:     "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
+			Query: "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
 			//NormalizedQuery: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?;",
 		},
+		timestamp: t1.Truncate(time.Second),
 	},
 	{
-		rawE: rawEvent{
-			lines: []string{
-				"# Time: not-a-parsable-time-stampZ",
-				"SET timestamp=1459470669;",
-				"use someDB;",
-			},
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"SET timestamp=1459470669;",
+			"use someDB;",
 		},
 		sq: SlowQuery{
-			Timestamp: t2,
-			UnixTime:  1459470669,
-			DB:        "someDB",
-			Query:     "use someDB;",
+			DB:    "someDB",
+			Query: "use someDB;",
 		},
+		timestamp: t1.Truncate(time.Second),
 	},
 	{
-		rawE: rawEvent{
-			lines: []string{},
-		},
-		sq: SlowQuery{},
+		rawE: []string{},
+		sq:   SlowQuery{},
 	},
 }
 
@@ -130,9 +127,13 @@ func TestHandleEvent(t *testing.T) {
 		nower: &FakeNower{},
 	}
 	for i, sqd := range sqds {
-		res := p.handleEvent(sqd.rawE)
+		res, timestamp := p.handleEvent(sqd.rawE)
 		if !reflect.DeepEqual(res, sqd.sq) {
 			t.Errorf("case num %d: expected\n %+v, got\n %+v", i, sqd.sq, res)
+		}
+		if timestamp.UnixNano() != sqd.timestamp.UnixNano() {
+			t.Errorf("case num %d: time parsed incorrectly:\n\tExpected: %+v, Actual: %+v",
+				i, sqd.timestamp, timestamp)
 		}
 	}
 }
@@ -142,9 +143,53 @@ func TestProcessSlowQuery(t *testing.T) {
 		nower: &FakeNower{},
 	}
 	for i, sqd := range sqds {
-		res, err := p.processSlowQuery(sqd.sq)
+		res, err := p.processSlowQuery(sqd.sq, sqd.timestamp)
 		if err == nil && sqd.psqWillError {
-			t.Fatalf("case num %d: expected processSlowQuery to error (%+v) but it didn't. sq: %+v, res: %+v", i, err, sqd, res)
+			t.Errorf("case num %d: expected processSlowQuery to error (%+v) but it didn't. sq: %+v, res: %+v", i, err, sqd, res)
+		}
+	}
+}
+
+func TestTimeProcessing(t *testing.T) {
+	p := &Parser{
+		nower: &FakeNower{},
+	}
+	tsts := []struct {
+		lines    []string
+		expected time.Time
+	}{
+		{[]string{
+			"# Time: 2016-09-15T10:16:17.898325Z", hostLine, timerLine, useLine,
+			"SET timestamp=1473934577;",
+		}, time.Date(2016, time.September, 15, 10, 16, 17, 898325000, time.UTC)},
+		{[]string{
+			"# Time: not-a-parsable-time-stampZ", hostLine, timerLine, useLine,
+			"SET timestamp=1459470669;",
+		}, time.Date(2016, time.April, 1, 0, 31, 9, 0, time.UTC)},
+		{[]string{
+			"# Time: 2016-09-16T19:37:39.006083Z", hostLine, timerLine, useLine,
+		}, time.Date(2016, time.September, 16, 19, 37, 39, 6083000, time.UTC)},
+		{[]string{hostLine, timerLine, useLine}, p.nower.Now()},
+	}
+
+	for _, tt := range tsts {
+		res, timestamp := p.handleEvent(tt.lines)
+		if timestamp.Unix() != tt.expected.Unix() {
+			t.Errorf("Didn't capture unix ts from lines:\n%+v\n\tExpected: %d, Actual: %d",
+				strings.Join(tt.lines, "\n"), tt.expected.Unix(), timestamp.Unix())
+		}
+		if timestamp.Nanosecond() != tt.expected.Nanosecond() {
+			t.Errorf("Didn't capture time with MS resolution from lines:\n%+v\n\tExpected: %d, Actual: %d",
+				strings.Join(tt.lines, "\n"), tt.expected.Nanosecond(), timestamp.Nanosecond())
+		}
+
+		ev, err := p.processSlowQuery(res, timestamp)
+		if err != nil {
+			t.Error("unexpected error processing SlowQuery:", err)
+		}
+		if ev.Timestamp.UnixNano() != tt.expected.UnixNano() {
+			t.Errorf("Processed SlowQuery should contain correct unix ts\n%+v\n\tExpected: %d, Actual: %d (%+v)",
+				strings.Join(tt.lines, "\n"), tt.expected.UnixNano(), ev.Timestamp.UnixNano(), ev.Timestamp)
 		}
 	}
 }

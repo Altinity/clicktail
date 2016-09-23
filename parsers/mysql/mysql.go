@@ -16,6 +16,7 @@ import (
 	"github.com/honeycombio/honeytail/event"
 )
 
+// See mysql_test for example log entries
 // 3 sample log entries
 //
 // # Time: 2016-04-01T00:31:09.817887Z
@@ -82,29 +83,22 @@ func (n *RealNower) Now() time.Time {
 	return time.Now().UTC()
 }
 
-// rawEvent is the unparsed multi-line entry representing a single slow query
-type rawEvent struct {
-	lines []string
-}
-
 // slowQuery represents the structured form of a query from the slow query log
 type SlowQuery struct {
-	Timestamp       time.Time `json:"time"`
-	UnixTime        int       `json:"unixtime"`
-	User            string    `json:"user"`
-	Client          string    `json:"client"`
-	QueryTime       float64   `json:"query_time"`
-	LockTime        float64   `json:"lock_time"`
-	RowsSent        int       `json:"rows_sent"`
-	RowsExamined    int       `json:"rows_examined"`
-	Query           string    `json:"query,omitempty"`
-	NormalizedQuery string    `json:"normalized_query,omitempty"`
-	DB              string    `json:"db,omitempty"`
-	HostedOn        *string   `json:"hosted_on,omitempty"`
-	ReadOnly        *bool     `json:"read_only,omitempty"`
-	ReplicaLag      *int64    `json:"replica_lag,omitempty"`
-	Role            *string   `json:"role,omitempty"`
-	ClientIP        string    `json:"client_ip,omitempty"`
+	User            string   `json:"user"`
+	Client          string   `json:"client"`
+	QueryTime       *float64 `json:"query_time"`
+	LockTime        *float64 `json:"lock_time"`
+	RowsSent        *int     `json:"rows_sent"`
+	RowsExamined    *int     `json:"rows_examined"`
+	Query           string   `json:"query,omitempty"`
+	NormalizedQuery string   `json:"normalized_query,omitempty"`
+	DB              string   `json:"db,omitempty"`
+	HostedOn        *string  `json:"hosted_on,omitempty"`
+	ReadOnly        *bool    `json:"read_only,omitempty"`
+	ReplicaLag      *int64   `json:"replica_lag,omitempty"`
+	Role            *string  `json:"role,omitempty"`
+	ClientIP        string   `json:"client_ip,omitempty"`
 	skipQuery       bool
 }
 
@@ -253,7 +247,7 @@ func getRole(db *sql.DB) (*string, error) {
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	// start up a goroutine to handle grouped sets of lines
-	rawEvents := make(chan rawEvent)
+	rawEvents := make(chan []string)
 	var wg sync.WaitGroup
 	p.wg = wg
 	defer p.wg.Wait()
@@ -270,27 +264,27 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 		}
 		if sendEvent {
 			sendEvent = false
-			rawEvents <- rawEvent{lines: groupedLines}
+			rawEvents <- groupedLines
 			groupedLines = make([]string, 0, 5)
 		}
 		groupedLines = append(groupedLines, line)
 	}
 	if len(groupedLines) != 0 {
-		rawEvents <- rawEvent{lines: groupedLines}
+		rawEvents <- groupedLines
 	}
 	logrus.Debug("lines channel is closed, ending mysql processor")
 	close(rawEvents)
 }
 
-func (p *Parser) handleEvents(rawEvents <-chan rawEvent, send chan<- event.Event) {
+func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event) {
 	defer p.wg.Done()
 	for rawE := range rawEvents {
-		sq := p.handleEvent(rawE)
+		sq, timestamp := p.handleEvent(rawE)
 		sq.HostedOn = p.hostedOn
 		sq.ReadOnly = p.readOnly
 		sq.ReplicaLag = p.replicaLag
 		sq.Role = p.role
-		ev, err := p.processSlowQuery(sq)
+		ev, err := p.processSlowQuery(sq, timestamp)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"err":       err,
@@ -303,22 +297,22 @@ func (p *Parser) handleEvents(rawEvents <-chan rawEvent, send chan<- event.Event
 	logrus.Debug("done with mysql handleEvents")
 }
 
-// handle a single event
-func (p *Parser) handleEvent(rawE rawEvent) SlowQuery {
-	var err error
+// Parse a set of MySQL log lines that seem to represent a single event and
+// return a struct of extracted data as well as the highest-resolution timestamp
+// available.
+func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 	sq := SlowQuery{}
 	logrus.WithFields(logrus.Fields{
 		"rawE": rawE,
 	}).Debug("About to parse event")
-	for _, line := range rawE.lines {
+	var timeFromComment time.Time
+	var timeFromSet int64
+	for _, line := range rawE {
 		// parse each line and populate the SlowQuery object
 		switch {
 		case reTime.MatchString(line):
 			matchGroups := reTime.FindStringSubmatchMap(line)
-			sq.Timestamp, err = time.Parse(timeFormat, matchGroups["time"])
-			if err != nil {
-				sq.Timestamp = p.nower.Now()
-			}
+			timeFromComment, _ = time.Parse(timeFormat, matchGroups["time"])
 		case reAdminPing.MatchString(line):
 			// this evetn is an administrative ping and we should
 			// ignore the entire event
@@ -335,10 +329,18 @@ func (p *Parser) handleEvent(rawE rawEvent) SlowQuery {
 			sq.ClientIP = hostAndIP[1][1 : len(hostAndIP[1])-1]
 		case reQueryStats.MatchString(line):
 			matchGroups := reQueryStats.FindStringSubmatchMap(line)
-			sq.QueryTime, err = strconv.ParseFloat(matchGroups["queryTime"], 64)
-			sq.LockTime, err = strconv.ParseFloat(matchGroups["lockTime"], 64)
-			sq.RowsSent, err = strconv.Atoi(matchGroups["rowsSent"])
-			sq.RowsExamined, err = strconv.Atoi(matchGroups["rowsExamined"])
+			if queryTime, err := strconv.ParseFloat(matchGroups["queryTime"], 64); err == nil {
+				sq.QueryTime = &queryTime
+			}
+			if lockTime, err := strconv.ParseFloat(matchGroups["lockTime"], 64); err == nil {
+				sq.LockTime = &lockTime
+			}
+			if rowsSent, err := strconv.Atoi(matchGroups["rowsSent"]); err == nil {
+				sq.RowsSent = &rowsSent
+			}
+			if rowsExamined, err := strconv.Atoi(matchGroups["rowsExamined"]); err == nil {
+				sq.RowsExamined = &rowsExamined
+			}
 		case reUse.FindString(line) != "":
 			db := strings.TrimPrefix(line, reUse.FindString(line))
 			db = strings.TrimRight(db, ";")
@@ -348,7 +350,7 @@ func (p *Parser) handleEvent(rawE rawEvent) SlowQuery {
 			sq.Query = line
 		case reSetTime.MatchString(line):
 			matchGroups := reSetTime.FindStringSubmatchMap(line)
-			sq.UnixTime, err = strconv.Atoi(matchGroups["unixTime"])
+			timeFromSet, _ = strconv.ParseInt(matchGroups["unixTime"], 10, 64)
 		case reQuery.MatchString(line):
 			matchGroups := reQuery.FindStringSubmatchMap(line)
 			sq.Query = matchGroups["query"]
@@ -360,11 +362,27 @@ func (p *Parser) handleEvent(rawE rawEvent) SlowQuery {
 			}).Debug("No regex match for line in the middle of a query. skipping")
 		}
 	}
-	// We always need a timestamp; if we never found the line, use Now()
-	if sq.Timestamp.IsZero() {
-		sq.Timestamp = p.nower.Now()
+
+	// We always need a timestamp.
+	//
+	// timeFromComment may include millisecond resolution but doesn't include
+	//   time zone.
+	// timeFromSet is a UNIX timestamp and thus more reliable, but also (thus)
+	//   doesn't contain millisecond resolution.
+	//
+	// In the best case (we have both), we combine the two; in the worst case (we
+	//   have neither) we fall back to "now."
+	combinedTime := p.nower.Now()
+	if !timeFromComment.IsZero() && timeFromSet > 0 {
+		nanos := time.Duration(timeFromComment.Nanosecond())
+		combinedTime = time.Unix(timeFromSet, 0).Add(nanos)
+	} else if !timeFromComment.IsZero() {
+		combinedTime = timeFromComment // cross our fingers that UTC is ok
+	} else if timeFromSet > 0 {
+		combinedTime = time.Unix(timeFromSet, 0)
 	}
-	return sq
+
+	return sq, combinedTime
 }
 
 // custom error to indicate empty query
@@ -377,15 +395,16 @@ func (e *emptyQueryError) Error() string {
 	return e.err
 }
 
-func (p *Parser) processSlowQuery(sq SlowQuery) (event.Event, error) {
+func (p *Parser) processSlowQuery(sq SlowQuery, timestamp time.Time) (event.Event, error) {
 	// if we didn't match any lines at all, skip the query
 	if sq == (SlowQuery{}) {
 		sq.skipQuery = true
 	}
+
 	// OK, we've collected all the lines, send in the event
 	if !sq.skipQuery {
 		return event.Event{
-			Timestamp: sq.Timestamp,
+			Timestamp: timestamp,
 			Data:      sq.mapify(),
 		}, nil
 	}
@@ -395,8 +414,6 @@ func (p *Parser) processSlowQuery(sq SlowQuery) (event.Event, error) {
 
 func (s SlowQuery) mapify() map[string]interface{} {
 	mapped := map[string]interface{}{
-		"time":             s.Timestamp,
-		"unixtime":         s.UnixTime,
 		"user":             s.User,
 		"client":           s.Client,
 		"client_ip":        s.ClientIP,
