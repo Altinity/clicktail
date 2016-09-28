@@ -12,6 +12,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/honeycombio/mysqltools/query/normalizer"
 
 	"github.com/honeycombio/honeytail/event"
 )
@@ -71,6 +72,7 @@ type Parser struct {
 	readOnly   *bool
 	replicaLag *int64
 	role       *string
+	normalizer *normalizer.Parser
 }
 
 type Nower interface {
@@ -99,12 +101,15 @@ type SlowQuery struct {
 	ReplicaLag      *int64   `json:"replica_lag,omitempty"`
 	Role            *string  `json:"role,omitempty"`
 	ClientIP        string   `json:"client_ip,omitempty"`
+	Statement       string   `json:"statement,omitempty"`
+	Tables          string   `json:"tables,omitempty"`
 	skipQuery       bool
 }
 
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	p.nower = &RealNower{}
+	p.normalizer = &normalizer.Parser{}
 	if p.conf.Host != "" {
 		url := fmt.Sprintf("%s:%s@tcp(%s)/", p.conf.User, p.conf.Pass, p.conf.Host)
 		db, err := sql.Open("mysql", url)
@@ -302,18 +307,18 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 // available.
 func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 	sq := SlowQuery{}
-	logrus.WithFields(logrus.Fields{
-		"rawE": rawE,
-	}).Debug("About to parse event")
 	var timeFromComment time.Time
 	var timeFromSet int64
+	query := ""
 	for _, line := range rawE {
 		// parse each line and populate the SlowQuery object
 		switch {
 		case reTime.MatchString(line):
+			query = ""
 			matchGroups := reTime.FindStringSubmatchMap(line)
 			timeFromComment, _ = time.Parse(timeFormat, matchGroups["time"])
 		case reAdminPing.MatchString(line):
+			query = ""
 			// this evetn is an administrative ping and we should
 			// ignore the entire event
 			logrus.WithFields(logrus.Fields{
@@ -322,12 +327,14 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 			}).Debug("readmin ping detected; skipping this event")
 			sq.skipQuery = true
 		case reUser.MatchString(line):
+			query = ""
 			matchGroups := reUser.FindStringSubmatchMap(line)
 			sq.User = strings.Split(matchGroups["user"], "[")[0]
 			hostAndIP := strings.Split(matchGroups["host"], " ")
 			sq.Client = hostAndIP[0]
 			sq.ClientIP = hostAndIP[1][1 : len(hostAndIP[1])-1]
 		case reQueryStats.MatchString(line):
+			query = ""
 			matchGroups := reQueryStats.FindStringSubmatchMap(line)
 			if queryTime, err := strconv.ParseFloat(matchGroups["queryTime"], 64); err == nil {
 				sq.QueryTime = &queryTime
@@ -342,19 +349,31 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 				sq.RowsExamined = &rowsExamined
 			}
 		case reUse.FindString(line) != "":
+			query = ""
 			db := strings.TrimPrefix(line, reUse.FindString(line))
 			db = strings.TrimRight(db, ";")
 			db = strings.Trim(db, "`")
 			sq.DB = db
-			// Use this line as the query unless, if a real query follows it will be replaced.
-			sq.Query = line
+			// Use this line as the query/normalized_query unless, if a real query follows it will be replaced.
+			sq.Query = strings.TrimRight(line, ";")
+			sq.NormalizedQuery = sq.Query
 		case reSetTime.MatchString(line):
+			query = ""
 			matchGroups := reSetTime.FindStringSubmatchMap(line)
 			timeFromSet, _ = strconv.ParseInt(matchGroups["unixTime"], 10, 64)
 		case reQuery.MatchString(line):
 			matchGroups := reQuery.FindStringSubmatchMap(line)
-			sq.Query = matchGroups["query"]
-			sq.NormalizedQuery = ""
+			query = query + matchGroups["query"]
+			if strings.HasSuffix(query, ";") {
+				sq.Query = strings.TrimSuffix(query, ";")
+				sq.NormalizedQuery = p.normalizer.NormalizeQuery(sq.Query)
+				if len(p.normalizer.LastTables) > 0 {
+					sq.Tables = strings.Join(p.normalizer.LastTables, " ")
+				}
+				sq.Statement = p.normalizer.LastStatement
+				query = ""
+			}
+
 		default:
 			// unknown row; log and skip
 			logrus.WithFields(logrus.Fields{
@@ -423,6 +442,12 @@ func (s SlowQuery) mapify() map[string]interface{} {
 		"rows_examined":    s.RowsExamined,
 		"query":            s.Query,
 		"normalized_query": s.NormalizedQuery,
+	}
+	if s.Statement != "" {
+		mapped["statement"] = s.Statement
+	}
+	if s.Tables != "" {
+		mapped["tables"] = s.Tables
 	}
 	if s.HostedOn != nil {
 		mapped["hosted_on"] = *s.HostedOn
