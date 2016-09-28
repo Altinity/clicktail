@@ -41,6 +41,31 @@ import (
 // We should ignore the administrator command entry; the stats it presents (eg rows_sent)
 // are actually for the previous command
 
+const (
+	rdsStr  = "rds"
+	ec2Str  = "ec2"
+	selfStr = "self"
+
+	// Event attributes
+	userKey            = "user"
+	clientKey          = "client"
+	clientIPKey        = "client_ip"
+	queryTimeKey       = "query_time"
+	lockTimeKey        = "lock_time"
+	rowsSentKey        = "rows_sent"
+	rowsExaminedKey    = "rows_examined"
+	databaseKey        = "database"
+	queryKey           = "query"
+	normalizedQueryKey = "normalized_query"
+	statementKey       = "statement"
+	tablesKey          = "tables"
+	// Event attributes that apply to the host as a whole
+	hostedOnKey   = "hosted_on"
+	readOnlyKey   = "read_only"
+	replicaLagKey = "replica_lag"
+	roleKey       = "role"
+)
+
 var (
 	reTime       = myRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
 	reAdminPing  = myRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
@@ -49,10 +74,6 @@ var (
 	reSetTime    = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery      = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
 	reUse        = myRegexp{regexp.MustCompile("^(?i)use ")}
-
-	rdsStr  = "rds"
-	ec2Str  = "ec2"
-	selfStr = "self"
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
@@ -68,7 +89,7 @@ type Parser struct {
 	conf       Options
 	wg         sync.WaitGroup
 	nower      Nower
-	hostedOn   *string
+	hostedOn   string
 	readOnly   *bool
 	replicaLag *int64
 	role       *string
@@ -83,27 +104,6 @@ type RealNower struct{}
 
 func (n *RealNower) Now() time.Time {
 	return time.Now().UTC()
-}
-
-// slowQuery represents the structured form of a query from the slow query log
-type SlowQuery struct {
-	User            string   `json:"user"`
-	Client          string   `json:"client"`
-	QueryTime       *float64 `json:"query_time"`
-	LockTime        *float64 `json:"lock_time"`
-	RowsSent        *int     `json:"rows_sent"`
-	RowsExamined    *int     `json:"rows_examined"`
-	Query           string   `json:"query,omitempty"`
-	NormalizedQuery string   `json:"normalized_query,omitempty"`
-	DB              string   `json:"db,omitempty"`
-	HostedOn        *string  `json:"hosted_on,omitempty"`
-	ReadOnly        *bool    `json:"read_only,omitempty"`
-	ReplicaLag      *int64   `json:"replica_lag,omitempty"`
-	Role            *string  `json:"role,omitempty"`
-	ClientIP        string   `json:"client_ip,omitempty"`
-	Statement       string   `json:"statement,omitempty"`
-	Tables          string   `json:"tables,omitempty"`
-	skipQuery       bool
 }
 
 func (p *Parser) Init(options interface{}) error {
@@ -173,10 +173,10 @@ func getReadOnly(db *sql.DB) (*bool, error) {
 	return &value, nil
 }
 
-func getHostedOn(db *sql.DB) (*string, error) {
+func getHostedOn(db *sql.DB) (string, error) {
 	rows, err := db.Query("SHOW GLOBAL VARIABLES WHERE Variable_name = 'basedir';")
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer rows.Close()
 
@@ -184,19 +184,19 @@ func getHostedOn(db *sql.DB) (*string, error) {
 
 	for rows.Next() {
 		if err := rows.Scan(&varName, &value); err != nil {
-			return nil, err
+			return "", err
 		}
 		if strings.HasPrefix(value, "/rdsdbbin/") {
-			return &rdsStr, nil
+			return rdsStr, nil
 		}
 	}
 
 	// TODO: implement ec2 detection
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return "", err
 	}
-	return nil, nil
+	return "", nil
 }
 
 func getReplicaLag(db *sql.DB) (*int64, error) {
@@ -285,19 +285,25 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 	defer p.wg.Done()
 	for rawE := range rawEvents {
 		sq, timestamp := p.handleEvent(rawE)
-		sq.HostedOn = p.hostedOn
-		sq.ReadOnly = p.readOnly
-		sq.ReplicaLag = p.replicaLag
-		sq.Role = p.role
-		ev, err := p.processSlowQuery(sq, timestamp)
-		if err != nil {
-			logrus.WithFields(logrus.Fields{
-				"err":       err,
-				"slowQuery": sq,
-			}).Debug("skipping query")
+		if len(sq) == 0 {
 			continue
 		}
-		send <- ev
+		if p.hostedOn != "" {
+			sq[hostedOnKey] = p.hostedOn
+		}
+		if p.readOnly != nil {
+			sq[readOnlyKey] = *p.readOnly
+		}
+		if p.replicaLag != nil {
+			sq[replicaLagKey] = *p.replicaLag
+		}
+		if p.role != nil {
+			sq[roleKey] = *p.role
+		}
+		send <- event.Event{
+			Timestamp: timestamp,
+			Data:      sq,
+		}
 	}
 	logrus.Debug("done with mysql handleEvents")
 }
@@ -305,13 +311,13 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 // Parse a set of MySQL log lines that seem to represent a single event and
 // return a struct of extracted data as well as the highest-resolution timestamp
 // available.
-func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
-	sq := SlowQuery{}
+func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) {
+	sq := map[string]interface{}{}
 	var timeFromComment time.Time
 	var timeFromSet int64
 	query := ""
 	for _, line := range rawE {
-		// parse each line and populate the SlowQuery object
+		// parse each line and populate the map of attributes
 		switch {
 		case reTime.MatchString(line):
 			query = ""
@@ -325,38 +331,38 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 				"line":  line,
 				"event": rawE,
 			}).Debug("readmin ping detected; skipping this event")
-			sq.skipQuery = true
+			return nil, time.Time{}
 		case reUser.MatchString(line):
 			query = ""
 			matchGroups := reUser.FindStringSubmatchMap(line)
-			sq.User = strings.Split(matchGroups["user"], "[")[0]
+			sq[userKey] = strings.Split(matchGroups["user"], "[")[0]
 			hostAndIP := strings.Split(matchGroups["host"], " ")
-			sq.Client = hostAndIP[0]
-			sq.ClientIP = hostAndIP[1][1 : len(hostAndIP[1])-1]
+			sq[clientKey] = hostAndIP[0]
+			sq[clientIPKey] = hostAndIP[1][1 : len(hostAndIP[1])-1]
 		case reQueryStats.MatchString(line):
 			query = ""
 			matchGroups := reQueryStats.FindStringSubmatchMap(line)
 			if queryTime, err := strconv.ParseFloat(matchGroups["queryTime"], 64); err == nil {
-				sq.QueryTime = &queryTime
+				sq[queryTimeKey] = queryTime
 			}
 			if lockTime, err := strconv.ParseFloat(matchGroups["lockTime"], 64); err == nil {
-				sq.LockTime = &lockTime
+				sq[lockTimeKey] = lockTime
 			}
 			if rowsSent, err := strconv.Atoi(matchGroups["rowsSent"]); err == nil {
-				sq.RowsSent = &rowsSent
+				sq[rowsSentKey] = rowsSent
 			}
 			if rowsExamined, err := strconv.Atoi(matchGroups["rowsExamined"]); err == nil {
-				sq.RowsExamined = &rowsExamined
+				sq[rowsExaminedKey] = rowsExamined
 			}
 		case reUse.FindString(line) != "":
 			query = ""
 			db := strings.TrimPrefix(line, reUse.FindString(line))
 			db = strings.TrimRight(db, ";")
 			db = strings.Trim(db, "`")
-			sq.DB = db
+			sq[databaseKey] = db
 			// Use this line as the query/normalized_query unless, if a real query follows it will be replaced.
-			sq.Query = strings.TrimRight(line, ";")
-			sq.NormalizedQuery = sq.Query
+			sq[queryKey] = strings.TrimRight(line, ";")
+			sq[normalizedQueryKey] = sq[queryKey]
 		case reSetTime.MatchString(line):
 			query = ""
 			matchGroups := reSetTime.FindStringSubmatchMap(line)
@@ -365,12 +371,13 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 			matchGroups := reQuery.FindStringSubmatchMap(line)
 			query = query + " " + matchGroups["query"]
 			if strings.HasSuffix(query, ";") {
-				sq.Query = strings.TrimSpace(strings.TrimSuffix(query, ";"))
-				sq.NormalizedQuery = p.normalizer.NormalizeQuery(sq.Query)
+				q := strings.TrimSpace(strings.TrimSuffix(query, ";"))
+				sq[queryKey] = q
+				sq[normalizedQueryKey] = p.normalizer.NormalizeQuery(q)
 				if len(p.normalizer.LastTables) > 0 {
-					sq.Tables = strings.Join(p.normalizer.LastTables, " ")
+					sq[tablesKey] = strings.Join(p.normalizer.LastTables, " ")
 				}
-				sq.Statement = p.normalizer.LastStatement
+				sq[statementKey] = p.normalizer.LastStatement
 				query = ""
 			}
 
@@ -412,54 +419,4 @@ type emptyQueryError struct {
 func (e *emptyQueryError) Error() string {
 	e.err = "skipped slow query"
 	return e.err
-}
-
-func (p *Parser) processSlowQuery(sq SlowQuery, timestamp time.Time) (event.Event, error) {
-	// if we didn't match any lines at all, skip the query
-	if sq == (SlowQuery{}) {
-		sq.skipQuery = true
-	}
-
-	// OK, we've collected all the lines, send in the event
-	if !sq.skipQuery {
-		return event.Event{
-			Timestamp: timestamp,
-			Data:      sq.mapify(),
-		}, nil
-	}
-	// we're skipping this query
-	return event.Event{}, &emptyQueryError{}
-}
-
-func (s SlowQuery) mapify() map[string]interface{} {
-	mapped := map[string]interface{}{
-		"user":             s.User,
-		"client":           s.Client,
-		"client_ip":        s.ClientIP,
-		"query_time":       s.QueryTime,
-		"lock_time":        s.LockTime,
-		"rows_sent":        s.RowsSent,
-		"rows_examined":    s.RowsExamined,
-		"query":            s.Query,
-		"normalized_query": s.NormalizedQuery,
-	}
-	if s.Statement != "" {
-		mapped["statement"] = s.Statement
-	}
-	if s.Tables != "" {
-		mapped["tables"] = s.Tables
-	}
-	if s.HostedOn != nil {
-		mapped["hosted_on"] = *s.HostedOn
-	}
-	if s.ReadOnly != nil {
-		mapped["read_only"] = *s.ReadOnly
-	}
-	if s.ReplicaLag != nil {
-		mapped["replica_lag"] = *s.ReplicaLag
-	}
-	if s.Role != nil {
-		mapped["role"] = *s.Role
-	}
-	return mapped
 }
