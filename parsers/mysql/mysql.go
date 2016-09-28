@@ -363,9 +363,9 @@ func (p *Parser) handleEvent(rawE []string) (SlowQuery, time.Time) {
 			timeFromSet, _ = strconv.ParseInt(matchGroups["unixTime"], 10, 64)
 		case reQuery.MatchString(line):
 			matchGroups := reQuery.FindStringSubmatchMap(line)
-			query = query + matchGroups["query"]
+			query = query + " " + matchGroups["query"]
 			if strings.HasSuffix(query, ";") {
-				sq.Query = strings.TrimSuffix(query, ";")
+				sq.Query = strings.TrimSpace(strings.TrimSuffix(query, ";"))
 				sq.NormalizedQuery = p.normalizer.NormalizeQuery(sq.Query)
 				if len(p.normalizer.LastTables) > 0 {
 					sq.Tables = strings.Join(p.normalizer.LastTables, " ")

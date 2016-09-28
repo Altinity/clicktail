@@ -125,6 +125,22 @@ var sqds = []slowQueryData{
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
 			"SET timestamp=1459470669;",
+			"SELECT *",
+			"FROM orders WHERE",
+			"total > 1000;",
+		},
+		sq: SlowQuery{
+			Query:           "SELECT * FROM orders WHERE total > 1000",
+			NormalizedQuery: "select * from orders where total > ?",
+			Tables:          "orders",
+			Statement:       "select",
+		},
+		timestamp: t1.Truncate(time.Second),
+	},
+	{
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"SET timestamp=1459470669;",
 			"use someDB;",
 		},
 		sq: SlowQuery{
