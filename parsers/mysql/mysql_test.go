@@ -11,10 +11,8 @@ import (
 
 type slowQueryData struct {
 	rawE      []string
-	sq        SlowQuery
+	sq        map[string]interface{}
 	timestamp time.Time
-	// processSlowQuery will error
-	psqWillError bool
 }
 
 const (
@@ -40,11 +38,11 @@ var sqds = []slowQueryData{
 			"# Time: 2016-04-01T00:31:09.817887Z",
 			"# Query_time: 0.008393  Lock_time: 0.000154 Rows_sent: 1  Rows_examined: 357",
 		},
-		sq: SlowQuery{
-			QueryTime:    floatptr(0.008393),
-			LockTime:     floatptr(0.000154),
-			RowsSent:     intptr(1),
-			RowsExamined: intptr(357),
+		sq: map[string]interface{}{
+			queryTimeKey:    0.008393,
+			lockTimeKey:     0.000154,
+			rowsSentKey:     1,
+			rowsExaminedKey: 357,
 		},
 		timestamp: t1,
 	},
@@ -53,10 +51,10 @@ var sqds = []slowQueryData{
 			"# Time: not-a-parsable-time-stampZ",
 			"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
 		},
-		sq: SlowQuery{
-			User:     "someuser",
-			Client:   "hostfoo",
-			ClientIP: "192.168.2.1",
+		sq: map[string]interface{}{
+			userKey:     "someuser",
+			clientKey:   "hostfoo",
+			clientIPKey: "192.168.2.1",
 		},
 		timestamp: tUnparseable,
 	},
@@ -65,9 +63,10 @@ var sqds = []slowQueryData{
 			"# Time: not-a-parsable-time-stampZ",
 			"# User@Host: root @ localhost []  Id:   233",
 		},
-		sq: SlowQuery{
-			User:   "root",
-			Client: "localhost",
+		sq: map[string]interface{}{
+			userKey:     "root",
+			clientKey:   "localhost",
+			clientIPKey: "",
 		},
 		timestamp: tUnparseable,
 	},
@@ -76,11 +75,8 @@ var sqds = []slowQueryData{
 			"# Time: not-a-recognizable time stamp",
 			"# administrator command: Ping;",
 		},
-		sq: SlowQuery{
-			skipQuery: true,
-		},
-		timestamp:    tUnparseable,
-		psqWillError: true,
+		sq:        nil,
+		timestamp: tUnparseable,
 	},
 	{
 		rawE: []string{
@@ -88,9 +84,10 @@ var sqds = []slowQueryData{
 			"SET timestamp=1459470669;",
 			"show status like 'Uptime';",
 		},
-		sq: SlowQuery{
-			Query:           "show status like 'Uptime'",
-			NormalizedQuery: "show status like ?",
+		sq: map[string]interface{}{
+			queryKey:           "show status like 'Uptime'",
+			normalizedQueryKey: "show status like ?",
+			statementKey:       "",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
@@ -101,9 +98,10 @@ var sqds = []slowQueryData{
 			"SET timestamp=1459470669;",
 			"SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
 		},
-		sq: SlowQuery{
-			Query:           "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100",
-			NormalizedQuery: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?",
+		sq: map[string]interface{}{
+			queryKey:           "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100",
+			normalizedQueryKey: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?",
+			statementKey:       "",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
@@ -113,11 +111,11 @@ var sqds = []slowQueryData{
 			"SET timestamp=1459470669;",
 			"SELECT * FROM orders WHERE total > 1000;",
 		},
-		sq: SlowQuery{
-			Query:           "SELECT * FROM orders WHERE total > 1000",
-			NormalizedQuery: "select * from orders where total > ?",
-			Tables:          "orders",
-			Statement:       "select",
+		sq: map[string]interface{}{
+			queryKey:           "SELECT * FROM orders WHERE total > 1000",
+			normalizedQueryKey: "select * from orders where total > ?",
+			tablesKey:          "orders",
+			statementKey:       "select",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
@@ -129,11 +127,11 @@ var sqds = []slowQueryData{
 			"FROM orders WHERE",
 			"total > 1000;",
 		},
-		sq: SlowQuery{
-			Query:           "SELECT * FROM orders WHERE total > 1000",
-			NormalizedQuery: "select * from orders where total > ?",
-			Tables:          "orders",
-			Statement:       "select",
+		sq: map[string]interface{}{
+			queryKey:           "SELECT * FROM orders WHERE total > 1000",
+			normalizedQueryKey: "select * from orders where total > ?",
+			tablesKey:          "orders",
+			statementKey:       "select",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
@@ -143,16 +141,16 @@ var sqds = []slowQueryData{
 			"SET timestamp=1459470669;",
 			"use someDB;",
 		},
-		sq: SlowQuery{
-			DB:              "someDB",
-			Query:           "use someDB",
-			NormalizedQuery: "use someDB",
+		sq: map[string]interface{}{
+			databaseKey:        "someDB",
+			queryKey:           "use someDB",
+			normalizedQueryKey: "use someDB",
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
 	{
 		rawE: []string{},
-		sq:   SlowQuery{},
+		sq:   map[string]interface{}{},
 	},
 }
 
@@ -169,19 +167,6 @@ func TestHandleEvent(t *testing.T) {
 		if timestamp.UnixNano() != sqd.timestamp.UnixNano() {
 			t.Errorf("case num %d: time parsed incorrectly:\n\tExpected: %+v, Actual: %+v",
 				i, sqd.timestamp, timestamp)
-		}
-	}
-}
-
-func TestProcessSlowQuery(t *testing.T) {
-	p := &Parser{
-		nower:      &FakeNower{},
-		normalizer: &normalizer.Parser{},
-	}
-	for i, sqd := range sqds {
-		res, err := p.processSlowQuery(sqd.sq, sqd.timestamp)
-		if err == nil && sqd.psqWillError {
-			t.Errorf("case num %d: expected processSlowQuery to error (%+v) but it didn't. sq: %+v, res: %+v", i, err, sqd, res)
 		}
 	}
 }
@@ -209,7 +194,7 @@ func TestTimeProcessing(t *testing.T) {
 	}
 
 	for _, tt := range tsts {
-		res, timestamp := p.handleEvent(tt.lines)
+		_, timestamp := p.handleEvent(tt.lines)
 		if timestamp.Unix() != tt.expected.Unix() {
 			t.Errorf("Didn't capture unix ts from lines:\n%+v\n\tExpected: %d, Actual: %d",
 				strings.Join(tt.lines, "\n"), tt.expected.Unix(), timestamp.Unix())
@@ -217,15 +202,6 @@ func TestTimeProcessing(t *testing.T) {
 		if timestamp.Nanosecond() != tt.expected.Nanosecond() {
 			t.Errorf("Didn't capture time with MS resolution from lines:\n%+v\n\tExpected: %d, Actual: %d",
 				strings.Join(tt.lines, "\n"), tt.expected.Nanosecond(), timestamp.Nanosecond())
-		}
-
-		ev, err := p.processSlowQuery(res, timestamp)
-		if err != nil {
-			t.Error("unexpected error processing SlowQuery:", err)
-		}
-		if ev.Timestamp.UnixNano() != tt.expected.UnixNano() {
-			t.Errorf("Processed SlowQuery should contain correct unix ts\n%+v\n\tExpected: %d, Actual: %d (%+v)",
-				strings.Join(tt.lines, "\n"), tt.expected.UnixNano(), ev.Timestamp.UnixNano(), ev.Timestamp)
 		}
 	}
 }
