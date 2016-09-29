@@ -22,15 +22,13 @@ const (
 )
 
 var t1, _ = time.Parse("02/Jan/2006:15:04:05.000000", "01/Apr/2016:00:31:09.817887")
+var t2, _ = time.Parse("02/Jan/2006:15:04:05.000000", "01/Apr/2016:00:31:10.817887")
 var tUnparseable, _ = time.Parse("02/Jan/2006:15:04:05.000000", "02/Aug/2010:13:24:56")
 
 // `Time` field has ms resolution but no time zone; `SET timestamp=` is UNIX timestamp but no ms resolution
 // e: mysql… i guess we could/should just combine the unix timestamp second and the parsed timestamp ms
 // justify parsing both
 // could be terrible
-
-func intptr(i int) *int           { return &i }
-func floatptr(f float64) *float64 { return &f }
 
 var sqds = []slowQueryData{
 	{
@@ -147,6 +145,111 @@ var sqds = []slowQueryData{
 			normalizedQueryKey: "use someDB",
 		},
 		timestamp: t1.Truncate(time.Second),
+	},
+	{
+		// a use as well as query
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"SET timestamp=1459470669;",
+			"use someDB;",
+			"SELECT *",
+			"FROM orders WHERE",
+			"total > 1000;",
+		},
+		sq: map[string]interface{}{
+			databaseKey:        "someDB",
+			queryKey:           "SELECT * FROM orders WHERE total > 1000",
+			normalizedQueryKey: "select * from orders where total > ?",
+			tablesKey:          "orders",
+			statementKey:       "select",
+		},
+		timestamp: t1.Truncate(time.Second),
+	},
+	// some tests for corrupted logs
+	{
+		// invalid query + use + query
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"SET timestamp=1459470669;",
+			"SELECT *",
+			"use someDB;",
+			"SELECT *",
+			"FROM orders WHERE",
+			"total > 1000;",
+		},
+		sq: map[string]interface{}{
+			databaseKey:        "someDB",
+			queryKey:           "SELECT * FROM orders WHERE total > 1000",
+			normalizedQueryKey: "select * from orders where total > ?",
+			tablesKey:          "orders",
+			statementKey:       "select",
+		},
+		timestamp: t1.Truncate(time.Second),
+	},
+	{
+		// invalid query + set time + query
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"SET timestamp=1459470669;",
+			"SELECT * FROM orders WHERE",
+			"SET timestamp=1459470670;",
+			"SELECT * FROM orders WHERE total > 1000;",
+		},
+		sq: map[string]interface{}{
+			queryKey:           "SELECT * FROM orders WHERE total > 1000",
+			normalizedQueryKey: "select * from orders where total > ?",
+			tablesKey:          "orders",
+			statementKey:       "select",
+		},
+		timestamp: t2.Truncate(time.Second),
+	},
+	{
+		// query + query_time comment + query
+		rawE: []string{
+			"# Time: 2016-04-01T00:31:09.817887Z",
+			"SELECT * FROM orders WHERE total < 1000;",
+			"# Query_time: 0.008393  Lock_time: 0.000154 Rows_sent: 1  Rows_examined: 357",
+			"SELECT * FROM orders WHERE total > 1000;",
+		},
+		sq: map[string]interface{}{
+			queryTimeKey:       0.008393,
+			lockTimeKey:        0.000154,
+			rowsSentKey:        1,
+			rowsExaminedKey:    357,
+			queryKey:           "SELECT * FROM orders WHERE total > 1000",
+			normalizedQueryKey: "select * from orders where total > ?",
+			tablesKey:          "orders",
+			statementKey:       "select",
+		},
+		timestamp: t1,
+	},
+	{
+		// invalid query + user@host comment + query
+		rawE: []string{
+			"# Time: 2016-04-01T00:31:09.817887Z",
+			"SELECT * FROM orders WHERE",
+			"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
+			"SELECT * FROM orders WHERE total > 1000;",
+		},
+		sq: map[string]interface{}{
+			userKey:            "someuser",
+			clientKey:          "hostfoo",
+			clientIPKey:        "192.168.2.1",
+			queryKey:           "SELECT * FROM orders WHERE total > 1000",
+			normalizedQueryKey: "select * from orders where total > ?",
+			tablesKey:          "orders",
+			statementKey:       "select",
+		},
+		timestamp: t1,
+	},
+	{
+		// query without its last line
+		rawE: []string{
+			"# Time: 2016-04-01T00:31:09.817887Z",
+			"SELECT * FROM orders",
+		},
+		sq:        map[string]interface{}{},
+		timestamp: t1,
 	},
 	{
 		rawE: []string{},

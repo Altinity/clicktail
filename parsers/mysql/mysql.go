@@ -320,12 +320,10 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 		// parse each line and populate the map of attributes
 		switch {
 		case reTime.MatchString(line):
-			query = ""
 			matchGroups := reTime.FindStringSubmatchMap(line)
 			timeFromComment, _ = time.Parse(timeFormat, matchGroups["time"])
 		case reAdminPing.MatchString(line):
-			query = ""
-			// this evetn is an administrative ping and we should
+			// this event is an administrative ping and we should
 			// ignore the entire event
 			logrus.WithFields(logrus.Fields{
 				"line":  line,
