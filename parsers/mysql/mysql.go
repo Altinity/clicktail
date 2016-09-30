@@ -263,7 +263,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	var sendEvent bool
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
-		if strings.HasPrefix(line, "# Time: ") {
+		if strings.HasPrefix(line, "# ") && len(groupedLines) > 0 {
 			// we've started a new event. Send the previous one.
 			sendEvent = true
 		}
