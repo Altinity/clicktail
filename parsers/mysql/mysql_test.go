@@ -268,6 +268,25 @@ var sqds = []slowQueryData{
 		timestamp: t1,
 	},
 	{
+		// query with a comment
+		rawE: []string{
+			"# Time: 2016-04-01T00:31:09.817887Z",
+			"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
+			"SELECT /* from mysql.go:245 */ /* another comment */ * FROM orders WHERE total > 1000;",
+		},
+		sq: map[string]interface{}{
+			userKey:            "someuser",
+			clientKey:          "hostfoo",
+			clientIPKey:        "192.168.2.1",
+			queryKey:           "SELECT /* from mysql.go:245 */ /* another comment */ * FROM orders WHERE total > 1000",
+			normalizedQueryKey: "select * from orders where total > ?",
+			tablesKey:          "orders",
+			statementKey:       "select",
+			commentsKey:        "/* from mysql.go:245 */ /* another comment */",
+		},
+		timestamp: t1,
+	},
+	{
 		// query without its last line
 		rawE: []string{
 			"# Time: 2016-04-01T00:31:09.817887Z",

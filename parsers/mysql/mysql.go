@@ -66,6 +66,7 @@ const (
 	normalizedQueryKey = "normalized_query"
 	statementKey       = "statement"
 	tablesKey          = "tables"
+	commentsKey        = "comments"
 	// Event attributes that apply to the host as a whole
 	hostedOnKey   = "hosted_on"
 	readOnlyKey   = "read_only"
@@ -384,6 +385,9 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 				sq[normalizedQueryKey] = p.normalizer.NormalizeQuery(q)
 				if len(p.normalizer.LastTables) > 0 {
 					sq[tablesKey] = strings.Join(p.normalizer.LastTables, " ")
+				}
+				if len(p.normalizer.LastComments) > 0 {
+					sq[commentsKey] = "/* " + strings.Join(p.normalizer.LastComments, " */ /* ") + " */"
 				}
 				sq[statementKey] = p.normalizer.LastStatement
 				query = ""
