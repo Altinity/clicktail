@@ -334,11 +334,9 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 	query := ""
 	for _, line := range rawE {
 		// parse each line and populate the map of attributes
-		switch {
-		case reTime.MatchString(line):
-			matchGroups := reTime.FindStringSubmatchMap(line)
-			timeFromComment, _ = time.Parse(timeFormat, matchGroups["time"])
-		case reAdminPing.MatchString(line):
+		if mg := reTime.FindStringSubmatchMap(line); mg != nil {
+			timeFromComment, _ = time.Parse(timeFormat, mg["time"])
+		} else if reAdminPing.MatchString(line) {
 			// this event is an administrative ping and we should
 			// ignore the entire event
 			logrus.WithFields(logrus.Fields{
@@ -346,44 +344,40 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 				"event": rawE,
 			}).Debug("readmin ping detected; skipping this event")
 			return nil, time.Time{}
-		case reUser.MatchString(line):
+		} else if mg := reUser.FindStringSubmatchMap(line); mg != nil {
 			query = ""
-			matchGroups := reUser.FindStringSubmatchMap(line)
-			sq[userKey] = strings.Split(matchGroups["user"], "[")[0]
-			hostAndIP := strings.Split(matchGroups["host"], " ")
+			sq[userKey] = strings.Split(mg["user"], "[")[0]
+			hostAndIP := strings.Split(mg["host"], " ")
 			sq[clientKey] = hostAndIP[0]
 			sq[clientIPKey] = hostAndIP[1][1 : len(hostAndIP[1])-1]
-		case reQueryStats.MatchString(line):
+		} else if mg := reQueryStats.FindStringSubmatchMap(line); mg != nil {
 			query = ""
-			matchGroups := reQueryStats.FindStringSubmatchMap(line)
-			if queryTime, err := strconv.ParseFloat(matchGroups["queryTime"], 64); err == nil {
+			if queryTime, err := strconv.ParseFloat(mg["queryTime"], 64); err == nil {
 				sq[queryTimeKey] = queryTime
 			}
-			if lockTime, err := strconv.ParseFloat(matchGroups["lockTime"], 64); err == nil {
+			if lockTime, err := strconv.ParseFloat(mg["lockTime"], 64); err == nil {
 				sq[lockTimeKey] = lockTime
 			}
-			if rowsSent, err := strconv.Atoi(matchGroups["rowsSent"]); err == nil {
+			if rowsSent, err := strconv.Atoi(mg["rowsSent"]); err == nil {
 				sq[rowsSentKey] = rowsSent
 			}
-			if rowsExamined, err := strconv.Atoi(matchGroups["rowsExamined"]); err == nil {
+			if rowsExamined, err := strconv.Atoi(mg["rowsExamined"]); err == nil {
 				sq[rowsExaminedKey] = rowsExamined
 			}
-		case reUse.FindString(line) != "":
+		} else if match := reUse.FindString(line); match != "" {
 			query = ""
-			db := strings.TrimPrefix(line, reUse.FindString(line))
+			db := strings.TrimPrefix(line, match)
 			db = strings.TrimRight(db, ";")
 			db = strings.Trim(db, "`")
 			sq[databaseKey] = db
 			// Use this line as the query/normalized_query unless, if a real query follows it will be replaced.
 			sq[queryKey] = strings.TrimRight(line, ";")
 			sq[normalizedQueryKey] = sq[queryKey]
-		case reSetTime.MatchString(line):
+		} else if mg := reSetTime.FindStringSubmatchMap(line); mg != nil {
 			query = ""
-			matchGroups := reSetTime.FindStringSubmatchMap(line)
-			timeFromSet, _ = strconv.ParseInt(matchGroups["unixTime"], 10, 64)
-		case reQuery.MatchString(line):
-			matchGroups := reQuery.FindStringSubmatchMap(line)
-			query = query + " " + matchGroups["query"]
+			timeFromSet, _ = strconv.ParseInt(mg["unixTime"], 10, 64)
+		} else if mg := reQuery.FindStringSubmatchMap(line); mg != nil {
+			query = query + " " + mg["query"]
 			if strings.HasSuffix(query, ";") {
 				q := strings.TrimSpace(strings.TrimSuffix(query, ";"))
 				sq[queryKey] = q
@@ -394,8 +388,7 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 				sq[statementKey] = p.normalizer.LastStatement
 				query = ""
 			}
-
-		default:
+		} else {
 			// unknown row; log and skip
 			logrus.WithFields(logrus.Fields{
 				"line": line,
