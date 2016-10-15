@@ -38,20 +38,21 @@ var validParsers = []string{
 type GlobalOptions struct {
 	APIHost string `hidden:"true" long:"api_host" description:"Host for the Honeycomb API" default:"https://api.honeycomb.io/"`
 
-	ConfigFile string `short:"c" long:"config" description:"config file for honeytail in INI format." no-ini:"true"`
+	ConfigFile string `short:"c" long:"config" description:"Config file for honeytail in INI format." no-ini:"true"`
 
 	SampleRate     uint `short:"r" long:"samplerate" description:"Only send 1 / N log lines" default:"1"`
 	NumSenders     uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to Honeycomb" default:"10"`
 	Debug          bool `long:"debug" description:"Print debugging output"`
-	StatusInterval uint `long:"status_interval" description:"how frequently, in seconds, to print out summary info" default:"60"`
-	BackOff        bool `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped."`
+	StatusInterval uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
+	Backfill       bool `long:"backfill" description:"Configure honeytail to ingest old data in order to backfill Honeycomb. Sets the correct values for --backoff, --tail.read_from, and --tail.stop"`
 
-	ScrubFields    []string `long:"scrub_field" description:"for the field listed, apply a one-way hash to the field content. May be specified multiple times"`
-	DropFields     []string `long:"drop_field" description:"do not send the field to Honeycomb. May be specified multiple times"`
-	AddFields      []string `long:"add_field" description:"add the field to every event. Field should be key=val. May be specified multiple times"`
-	RequestShape   []string `long:"request_shape" description:"identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x' or just the request path. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
-	RequestPattern []string `long:"request_pattern" description:"a pattern for the request path on which to base the derived request_shape. May be specified multiple times. Patterns are considered in order; first match wins."`
-	ShapePrefix    string   `long:"shape_prefix" description:"prefix to use on fields generated from request_shape to prevent field collision"`
+	ScrubFields    []string `long:"scrub_field" description:"For the field listed, apply a one-way hash to the field content. May be specified multiple times"`
+	DropFields     []string `long:"drop_field" description:"Do not send the field to Honeycomb. May be specified multiple times"`
+	AddFields      []string `long:"add_field" description:"Add the field to every event. Field should be key=val. May be specified multiple times"`
+	RequestShape   []string `long:"request_shape" description:"Identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x' or just the request path. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
+	RequestPattern []string `long:"request_pattern" description:"A pattern for the request path on which to base the derived request_shape. May be specified multiple times. Patterns are considered in order; first match wins."`
+	ShapePrefix    string   `long:"shape_prefix" description:"Prefix to use on fields generated from request_shape to prevent field collision"`
+	BackOff        bool     `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped. When --backfill is set, it will override this option=true"`
 
 	Reqs  RequiredOptions `group:"Required Options"`
 	Modes OtherModes      `group:"Other Modes"`
@@ -75,8 +76,8 @@ type OtherModes struct {
 	Help               bool `short:"h" long:"help" description:"Show this help message"`
 	ListParsers        bool `short:"l" long:"list" description:"List available parsers"`
 	Version            bool `short:"V" long:"version" description:"Show version"`
-	WriteDefaultConfig bool `long:"write_default_config" description:"write a default config file to STDOUT" no-ini:"true"`
-	WriteCurrentConfig bool `long:"write_current_config" description:"write out the current config to STDOUT" no-ini:"true"`
+	WriteDefaultConfig bool `long:"write_default_config" description:"Write a default config file to STDOUT" no-ini:"true"`
+	WriteCurrentConfig bool `long:"write_current_config" description:"Write out the current config to STDOUT" no-ini:"true"`
 
 	WriteManPage bool `hidden:"true" long:"write-man-page" description:"Write out a man page"`
 }
@@ -114,53 +115,63 @@ func main() {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	setVersion()
-	handleOtherModes(flagParser, options)
+	// Support flag alias: --backfill should cover --backoff --tail.read_from=beginning --tail.stop
+	if options.Backfill {
+		options.BackOff = true
+		options.Tail.ReadFrom = "beginning"
+		options.Tail.Stop = true
+	}
+
+	setVersion(options.Backfill)
+	handleOtherModes(flagParser, options.Modes)
 	addParserDefaultOptions(&options)
 	sanityCheckOptions(&options)
 
-	verifyWritekey(options)
+	verifyWritekey(options.APIHost, options.Reqs.WriteKey)
 	run(options)
 }
 
 // setVersion sets the internal version ID and updates libhoney's user-agent
-func setVersion() {
+func setVersion(backfill bool) {
 	if BuildID == "" {
 		version = "dev"
 	} else {
 		version = BuildID
+	}
+	if backfill {
+		version += " backfill"
 	}
 	libhoney.UserAgentAddition = fmt.Sprintf("honeytail/%s", version)
 }
 
 // handleOtherModes takse care of all flags that say we should just do something
 // and exit rather than actually parsing logs
-func handleOtherModes(fp *flag.Parser, options GlobalOptions) {
-	if options.Modes.Version {
+func handleOtherModes(fp *flag.Parser, modes OtherModes) {
+	if modes.Version {
 		fmt.Println("Honeytail version", version)
 		os.Exit(0)
 	}
-	if options.Modes.Help {
+	if modes.Help {
 		fp.WriteHelp(os.Stdout)
 		fmt.Println("")
 		os.Exit(0)
 	}
-	if options.Modes.WriteManPage {
+	if modes.WriteManPage {
 		fp.WriteManPage(os.Stdout)
 		os.Exit(0)
 	}
-	if options.Modes.WriteDefaultConfig {
+	if modes.WriteDefaultConfig {
 		ip := flag.NewIniParser(fp)
 		ip.Write(os.Stdout, flag.IniIncludeDefaults|flag.IniCommentDefaults|flag.IniIncludeComments)
 		os.Exit(0)
 	}
-	if options.Modes.WriteCurrentConfig {
+	if modes.WriteCurrentConfig {
 		ip := flag.NewIniParser(fp)
 		ip.Write(os.Stdout, flag.IniIncludeComments)
 		os.Exit(0)
 	}
 
-	if options.Modes.ListParsers {
+	if modes.ListParsers {
 		fmt.Println("Available parsers:", strings.Join(validParsers, ", "))
 		os.Exit(0)
 	}
@@ -227,11 +238,11 @@ honeytail --help
 
 // verifyWritekey calls out to api to validate the writekey, so we can exit
 // immediately instead of happily sending events that are all rejected.
-func verifyWritekey(options GlobalOptions) {
-	url := fmt.Sprintf("%s/1/team_slug", options.APIHost)
+func verifyWritekey(apiHost string, writeKey string) {
+	url := fmt.Sprintf("%s/1/team_slug", apiHost)
 	req, err := http.NewRequest("GET", url, nil)
 	req.Header.Set("User-Agent", libhoney.UserAgentAddition)
-	req.Header.Add("X-Honeycomb-Team", options.Reqs.WriteKey)
+	req.Header.Add("X-Honeycomb-Team", writeKey)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
