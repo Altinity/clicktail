@@ -188,19 +188,19 @@ func addParserDefaultOptions(options *GlobalOptions) {
 func sanityCheckOptions(options *GlobalOptions) {
 	switch {
 	case options.Reqs.ParserName == "":
-		fmt.Println("parser required.")
+		fmt.Println("Parser required.")
 		usage()
 		os.Exit(1)
 	case options.Reqs.WriteKey == "" || options.Reqs.WriteKey == "NULL":
-		fmt.Println("write key required.")
+		fmt.Println("Write key required.")
 		usage()
 		os.Exit(1)
 	case len(options.Reqs.LogFiles) == 0:
-		fmt.Println("log file name or '-' required.")
+		fmt.Println("Log file name or '-' required.")
 		usage()
 		os.Exit(1)
 	case options.Reqs.Dataset == "":
-		fmt.Println("dataset name required.")
+		fmt.Println("Dataset name required.")
 		usage()
 		os.Exit(1)
 	case options.Tail.ReadFrom == "end" && options.Tail.Stop:
@@ -211,6 +211,12 @@ func sanityCheckOptions(options *GlobalOptions) {
 		fmt.Println("Statefile can not be set when tailing from multiple files.")
 		usage()
 		os.Exit(1)
+	case len(options.Reqs.LogFiles) > 0:
+		if _, err := os.Stat(options.Reqs.LogFiles[0]); os.IsNotExist(err) {
+			fmt.Printf("Log file specified by --file=%s not found!\n", options.Reqs.LogFiles[0])
+			usage()
+			os.Exit(1)
+		}
 	case options.Tail.StateFile != "":
 		files, err := filepath.Glob(options.Reqs.LogFiles[0])
 		if err != nil {
