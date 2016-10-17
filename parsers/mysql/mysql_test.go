@@ -32,7 +32,7 @@ var tUnparseable, _ = time.Parse("02/Jan/2006:15:04:05.000000", "02/Aug/2010:13:
 // could be terrible
 
 var sqds = []slowQueryData{
-	{
+	{ /* 0 */
 		rawE: []string{
 			"# Time: 2016-04-01T00:31:09.817887Z",
 			"# Query_time: 0.008393  Lock_time: 0.000154 Rows_sent: 1  Rows_examined: 357",
@@ -45,7 +45,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1,
 	},
-	{
+	{ /* 1 */
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
 			"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
@@ -57,7 +57,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: tUnparseable,
 	},
-	{
+	{ /* 2 */
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
 			"# User@Host: root @ localhost []  Id:   233",
@@ -69,7 +69,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: tUnparseable,
 	},
-	{
+	{ /* 3 */
 		// RDS style user host line
 		rawE: []string{
 			"# User@Host: root[root] @  [10.0.1.76]  Id: 325920",
@@ -81,7 +81,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: tUnparseable,
 	},
-	{
+	{ /* 4 */
 		// RDS style user host line with hostname
 		rawE: []string{
 			"# User@Host: root[root] @ foobar [10.0.1.76]  Id: 325920",
@@ -93,7 +93,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: tUnparseable,
 	},
-	{
+	{ /* 5 */
 		rawE: []string{
 			"# Time: not-a-recognizable time stamp",
 			"# administrator command: Ping;",
@@ -101,7 +101,7 @@ var sqds = []slowQueryData{
 		sq:        nil,
 		timestamp: tUnparseable,
 	},
-	{
+	{ /* 6 */
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
 			"SET timestamp=1459470669;",
@@ -114,7 +114,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
-	{
+	{ /* 7 */
 		// fails to parse "Time" but we capture unix time and we fall back to the scan normalizer
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
@@ -128,7 +128,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
-	{
+	{ /* 8 */
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
 			"SET timestamp=1459470669;",
@@ -142,7 +142,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
-	{
+	{ /* 9 */
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
 			"SET timestamp=1459470669;",
@@ -158,7 +158,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
-	{
+	{ /* 10 */
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
 			"SET timestamp=1459470669;",
@@ -171,7 +171,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
-	{
+	{ /* 11 */
 		// a use as well as query
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
@@ -191,7 +191,7 @@ var sqds = []slowQueryData{
 		timestamp: t1.Truncate(time.Second),
 	},
 	// some tests for corrupted logs
-	{
+	{ /* 12 */
 		// invalid query + use + query, ignore the invalid query
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
@@ -211,7 +211,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1.Truncate(time.Second),
 	},
-	{
+	{ /* 13 */
 		// invalid query + set time + query, ignore the invalid query
 		rawE: []string{
 			"# Time: not-a-parsable-time-stampZ",
@@ -228,7 +228,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t2.Truncate(time.Second),
 	},
-	{
+	{ /* 14 */
 		// query + query_time comment + query, ignore the first query
 		rawE: []string{
 			"# Time: 2016-04-01T00:31:09.817887Z",
@@ -248,7 +248,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1,
 	},
-	{
+	{ /* 15 */
 		// invalid query + user@host comment + query, ignore the invalid query
 		rawE: []string{
 			"# Time: 2016-04-01T00:31:09.817887Z",
@@ -267,7 +267,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1,
 	},
-	{
+	{ /* 16 */
 		// query with a comment
 		rawE: []string{
 			"# Time: 2016-04-01T00:31:09.817887Z",
@@ -286,7 +286,7 @@ var sqds = []slowQueryData{
 		},
 		timestamp: t1,
 	},
-	{
+	{ /* 17 */
 		// query without its last line
 		rawE: []string{
 			"# Time: 2016-04-01T00:31:09.817887Z",
@@ -295,9 +295,143 @@ var sqds = []slowQueryData{
 		sq:        map[string]interface{}{},
 		timestamp: t1,
 	},
-	{
+	{ /* 18 */
 		rawE: []string{},
 		sq:   map[string]interface{}{},
+	},
+	{ /* 19 */
+		rawE: []string{
+			"# Time: 160907  3:10:22",
+			"# User@Host: rw[rw] @  [10.96.81.110]  Id: 1394495950",
+			"# Schema: our_index  Last_errno: 0  Killed: 0",
+			"# Query_time: 1.294391  Lock_time: 0.000119  Rows_sent: 4049  Rows_examined: 4049  Rows_affected: 1",
+			"# Bytes_sent: 153824  Tmp_tables: 1  Tmp_disk_tables: 2  Tmp_table_sizes: 3",
+			"# InnoDB_trx_id: A569C193C7",
+			"# QC_Hit: No  Full_scan: No  Full_join: No  Tmp_table: No  Tmp_table_on_disk: No",
+			"# Filesort: No  Filesort_on_disk: No  Merge_passes: 0",
+			"#   InnoDB_IO_r_ops: 0  InnoDB_IO_r_bytes: 0  InnoDB_IO_r_wait: 0.000000",
+			"#   InnoDB_rec_lock_wait: 0.000000  InnoDB_queue_wait: 0.000000",
+			"#   InnoDB_pages_distinct: 6756",
+			"SET timestamp=1473217822;",
+			"/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`;",
+		},
+		sq: map[string]interface{}{
+			userKey:            "rw",
+			clientKey:          "",
+			clientIPKey:        "10.96.81.110",
+			queryTimeKey:       1.294391,
+			lockTimeKey:        0.000119,
+			rowsSentKey:        4049,
+			rowsExaminedKey:    4049,
+			rowsAffectedKey:    1,
+			queryKey:           "/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`",
+			normalizedQueryKey: "select * from `cats_index` as `cat_cat` where `cat_cat`.`cat_id` between ? and ? order by `cat_cat`.`cat_id`",
+			statementKey:       "select",
+			tablesKey:          "cat_cat cats_index",
+			bytesSentKey:       153824,
+			tmpTablesKey:       1,
+			tmpDiskTablesKey:   2,
+			tmpTableSizesKey:   3,
+			transactionIDKey:   "A569C193C7",
+			queryCacheHitKey:   false,
+			fullScanKey:        false,
+			fullJoinKey:        false,
+			tmpTableKey:        false,
+			tmpTableOnDiskKey:  false,
+			fileSortKey:        false,
+			fileSortOnDiskKey:  false,
+			mergePassesKey:     0,
+			ioROpsKey:          0,
+			ioRBytesKey:        0,
+			ioRWaitKey:         0.0,
+			recLockWaitKey:     0.0,
+			queueWaitKey:       0.0,
+			pagesDistinctKey:   6756,
+		},
+		timestamp: time.Unix(1473217822, 0),
+	},
+	{ /* 20 */
+		rawE: []string{
+			"# Time: 160907  3:10:22",
+			"# User@Host: rw[rw] @  [10.96.81.110]  Id: 1394495950",
+			"# Schema: our_index  Last_errno: 0  Killed: 0",
+			"# Query_time: 1.294391  Lock_time: 0.000119  Rows_sent: 4049  Rows_examined: 4049  Rows_affected: 1",
+			"# Bytes_sent: 153824  Tmp_tables: 1  Tmp_disk_tables: 2  Tmp_table_sizes: 3",
+			"# InnoDB_trx_id: A569C193C7",
+			"# QC_Hit: Yes  Full_scan: Yes  Full_join: Yes  Tmp_table: Yes  Tmp_table_on_disk: Yes",
+			"# Filesort: Yes  Filesort_on_disk: Yes  Merge_passes: 42",
+			"#   InnoDB_IO_r_ops: 1  InnoDB_IO_r_bytes: 2  InnoDB_IO_r_wait: 3.000000",
+			"#   InnoDB_rec_lock_wait: 4.000000  InnoDB_queue_wait: 5.000000",
+			"#   InnoDB_pages_distinct: 6756",
+			"SET timestamp=1473217822;",
+			"/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`;",
+		},
+		sq: map[string]interface{}{
+			userKey:            "rw",
+			clientKey:          "",
+			clientIPKey:        "10.96.81.110",
+			queryTimeKey:       1.294391,
+			lockTimeKey:        0.000119,
+			rowsSentKey:        4049,
+			rowsExaminedKey:    4049,
+			rowsAffectedKey:    1,
+			queryKey:           "/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`",
+			normalizedQueryKey: "select * from `cats_index` as `cat_cat` where `cat_cat`.`cat_id` between ? and ? order by `cat_cat`.`cat_id`",
+			statementKey:       "select",
+			tablesKey:          "cat_cat cats_index",
+			bytesSentKey:       153824,
+			tmpTablesKey:       1,
+			tmpDiskTablesKey:   2,
+			tmpTableSizesKey:   3,
+			transactionIDKey:   "A569C193C7",
+			queryCacheHitKey:   true,
+			fullScanKey:        true,
+			fullJoinKey:        true,
+			tmpTableKey:        true,
+			tmpTableOnDiskKey:  true,
+			fileSortKey:        true,
+			fileSortOnDiskKey:  true,
+			mergePassesKey:     42,
+			ioROpsKey:          1,
+			ioRBytesKey:        2,
+			ioRWaitKey:         3.0,
+			recLockWaitKey:     4.0,
+			queueWaitKey:       5.0,
+			pagesDistinctKey:   6756,
+		},
+		timestamp: time.Unix(1473217822, 0),
+	},
+	{ /* 21 */
+		rawE: []string{
+			"# User@Host: weaverw[weaverw] @ [10.14.214.13]",
+			"# Thread_id: 78959 Schema: weave3 Last_errno: 0 Killed: 0",
+			"# Query_time: 10.749944 Lock_time: 0.017599 Rows_sent: 0 Rows_examined: 0 Rows_affected: 10 Rows_read: 12",
+			"# Bytes_sent: 51 Tmp_tables: 0 Tmp_disk_tables: 0 Tmp_table_sizes: 0",
+			"# InnoDB_trx_id: 98CF",
+			"use weave3;",
+			"SET timestamp=1364506803;",
+			"SELECT COUNT(*) FROM foo;",
+		},
+		sq: map[string]interface{}{
+			userKey:            "weaverw",
+			clientKey:          nil,
+			clientIPKey:        "10.14.214.13",
+			queryTimeKey:       10.749944,
+			lockTimeKey:        0.017599,
+			rowsSentKey:        0,
+			rowsExaminedKey:    0,
+			rowsAffectedKey:    10,
+			queryKey:           "SELECT COUNT(*) FROM foo",
+			normalizedQueryKey: "select count(*) from foo",
+			statementKey:       "select",
+			tablesKey:          "foo",
+			bytesSentKey:       51,
+			tmpTablesKey:       0,
+			tmpDiskTablesKey:   0,
+			tmpTableSizesKey:   0,
+			transactionIDKey:   "98CF",
+		},
+		timestamp: time.Unix(1364506803, 0),
 	},
 }
 
@@ -308,8 +442,13 @@ func TestHandleEvent(t *testing.T) {
 	}
 	for i, sqd := range sqds {
 		res, timestamp := p.handleEvent(sqd.rawE)
-		if !reflect.DeepEqual(res, sqd.sq) {
-			t.Errorf("case num %d: expected\n %+v, got\n %+v", i, sqd.sq, res)
+		if len(res) != len(sqd.sq) {
+			t.Errorf("case num %d: expected to parse %d fields, got %d", i, len(sqd.sq), len(res))
+		}
+		for k, v := range sqd.sq {
+			if !reflect.DeepEqual(res[k], v) {
+				t.Errorf("case num %d, key %s:\n\texpected:\t%+v\n\tgot:\t\t%+v", i, k, v, res[k])
+			}
 		}
 		if timestamp.UnixNano() != sqd.timestamp.UnixNano() {
 			t.Errorf("case num %d: time parsed incorrectly:\n\tExpected: %+v, Actual: %+v",
