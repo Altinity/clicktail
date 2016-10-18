@@ -4,14 +4,12 @@
 // any necessary or relevant smarts for that style of logs.
 package parsers
 
-import (
-	"github.com/honeycombio/honeytail/event"
-)
+import "github.com/honeycombio/honeytail/event"
 
 type Parser interface {
 	// Init does any initialization necessary for the module
 	Init(options interface{}) error
-	// ProcessLines consumes log lines from the lines channel
-	// and sends log events to the send channel
+	// ProcessLines consumes log lines from the lines channel and sends log events
+	// to the send channel.
 	ProcessLines(lines <-chan string, send chan<- event.Event)
 }

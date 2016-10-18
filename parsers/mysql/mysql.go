@@ -329,7 +329,7 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 		if len(sq) == 0 {
 			continue
 		}
-		if _, ok := sq["query"]; !ok {
+		if q, ok := sq["query"]; !ok || q == "" {
 			// skip events with no query field
 			continue
 		}

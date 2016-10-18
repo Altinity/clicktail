@@ -21,6 +21,11 @@ import (
 	"github.com/honeycombio/honeytail/tail"
 )
 
+var tailOptions = tail.TailOptions{
+	ReadFrom: "start",
+	Stop:     true,
+}
+
 // defaultOptions is a fully populated GlobalOptions with good defaults to start from
 var defaultOptions = GlobalOptions{
 	// each test will have to populate APIHost with the location of its test server
@@ -35,10 +40,7 @@ var defaultOptions = GlobalOptions{
 		// LogFiles:   []string{tmpdir + ""},
 		Dataset: "pika",
 	},
-	Tail: tail.TailOptions{
-		ReadFrom: "start",
-		Stop:     true,
-	},
+	Tail:           tailOptions,
 	StatusInterval: 1,
 }
 
@@ -80,10 +82,91 @@ func TestBasicSend(t *testing.T) {
 	testEquals(t, ts.rsp.reqBody, `{"format":"json"}`)
 	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
 	testEquals(t, teamID, "abcabc123123")
-	request_url := ts.rsp.req.URL.Path
-	testEquals(t, request_url, "/1/events/pika")
+	requestURL := ts.rsp.req.URL.Path
+	testEquals(t, requestURL, "/1/events/pika")
 	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "1")
+}
+
+func TestMultipleFiles(t *testing.T) {
+	opts := defaultOptions
+	ts := &testSetup{}
+	ts.start(t, &opts)
+	defer ts.close()
+	logFile1 := ts.tmpdir + "/first.log"
+	fh1, err := os.Create(logFile1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logFile2 := ts.tmpdir + "/second.log"
+	fh2, err := os.Create(logFile2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fh1.Close()
+	fmt.Fprintf(fh1, `{"key1":"val1"}`)
+	defer fh2.Close()
+	fmt.Fprintf(fh2, `{"key2":"val2"}`)
+	opts.Reqs.LogFiles = []string{logFile1, logFile2}
+	run(opts)
+	testEquals(t, ts.rsp.reqCounter, 2)
+	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
+	testEquals(t, teamID, "abcabc123123")
+	requestURL := ts.rsp.req.URL.Path
+	testEquals(t, requestURL, "/1/events/pika")
+	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
+	testEquals(t, sampleRate, "1")
+}
+
+func TestMultiLineMultiFile(t *testing.T) {
+	opts := GlobalOptions{
+		NumSenders: 1,
+		Reqs: RequiredOptions{
+			ParserName: "mysql",
+			WriteKey:   "----",
+			Dataset:    "---",
+		},
+		Tail: tailOptions,
+	}
+	ts := &testSetup{}
+	ts.start(t, &opts)
+	defer ts.close()
+	logFile1 := ts.tmpdir + "/first.log"
+	fh1, err := os.Create(logFile1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprintf(fh1, `# Time: 2016-04-01T00:29:09.817887Z",
+# administrator command: Close stmt;
+# User@Host: root[root] @  [10.0.72.76]  Id: 432399
+# Query_time: 0.000114  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1459470669;
+SELECT *
+FROM orders WHERE
+total > 1000;
+# Time: 2016-04-01T00:31:09.817887Z
+SET timestamp=1459470669;
+show status like 'Uptime';`)
+	logFile2 := ts.tmpdir + "/second.log"
+	fh2, err := os.Create(logFile2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprintf(fh2, `# User@Host: rails[rails] @  [10.252.9.33]
+# Query_time: 0.002280  Lock_time: 0.000023 Rows_sent: 0  Rows_examined: 921
+SET timestamp=1444264264;
+SELECT certs.* FROM certs WHERE (certs.app_id = 993089) LIMIT 1;
+# administrator command: Prepare;
+# User@Host: root[root] @  [10.0.99.122]  Id: 432407
+# Query_time: 0.000122  Lock_time: 0.000033 Rows_sent: 1  Rows_examined: 1
+SET timestamp=1476702000;
+SELECT
+                  id, team_id, name, description, slug, limit_kb, created_at, updated_at
+                FROM datasets WHERE team_id=17 AND slug='api-prod';`)
+	opts.Reqs.LogFiles = []string{logFile1, logFile2}
+	run(opts)
+	testEquals(t, ts.rsp.reqCounter, 4)
+	// TODO: should actually assert on the contents of the events being logged
 }
 
 func TestSetVersion(t *testing.T) {
@@ -246,22 +329,22 @@ func TestSampleRate(t *testing.T) {
 	sampleLogFile := ts.tmpdir + "/sample.log"
 	logfh, _ := os.Create(sampleLogFile)
 	defer logfh.Close()
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		fmt.Fprintf(logfh, `{"format":"json%d"}`+"\n", i)
 	}
 	opts.Reqs.LogFiles = []string{sampleLogFile}
 	run(opts)
 	// with no sampling, 1000 lines -> 1000 requests
-	testEquals(t, ts.rsp.reqCounter, 1000)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json999"}`)
+	testEquals(t, ts.rsp.reqCounter, 100)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json99"}`)
 	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "1")
 	opts.SampleRate = 20
 	ts.rsp.reset()
 	run(opts)
 	// setting a sample rate of 20 and a rand seed of 1, 49 requests.
-	testEquals(t, ts.rsp.reqCounter, 55)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json978"}`)
+	testEquals(t, ts.rsp.reqCounter, 7)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json98"}`)
 	sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "20")
 }

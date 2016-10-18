@@ -9,11 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -59,165 +57,75 @@ type State struct {
 	Offset int64
 }
 
-// GetSampledEntries wraps GetEntries and returns a channel that provides
-// sampled entries
-func GetSampledEntries(conf Config, sampleRate int) (chan string, error) {
-	lines, err := GetEntries(conf)
-	if err != nil {
-		return nil, err
-	}
-	if sampleRate == 1 {
-		return lines, nil
-	}
-	sampledLines := make(chan string)
-	go func() {
-		defer close(sampledLines)
-		for line := range lines {
-			if shouldSample(sampleRate) {
-				sampledLines <- line
-			} else {
-				logrus.WithFields(logrus.Fields{
-					"line": line,
-				}).Debug("Sampler says skip this line")
-			}
-		}
-	}()
-	return sampledLines, nil
-}
-
-// shouldSample returns true if the line should be preserved
-// false if it should be skipped
-// if sampleRate is 5,
-// on average one out of every 5 calls should return true
-func shouldSample(sampleRate int) bool {
-	if rand.Intn(sampleRate) == 0 {
-		return true
-	}
-	return false
-}
-
-// GetEntries opens the log file, reading from the end. It sends one line
-// at a time down the returned channel
-func GetEntries(conf Config) (chan string, error) {
+// GetEntries sets up a list of channels that get one line at a time from each
+// file down each channel.
+func GetEntries(conf Config) ([]chan string, error) {
 	if conf.Type != RotateStyleSyslog {
 		return nil, errors.New("Only Syslog style rotation currently supported")
 	}
-	lines := make(chan string)
-	var wg sync.WaitGroup
-	defer func() {
-		go func() {
-			wg.Wait()
-			close(lines)
-		}()
-	}()
-	// handle reading from STDIN
-	if conf.Paths[0] == "-" {
-		return lines, tailStdIn(lines, &wg)
-	}
+	// expand any globs in the list of files so our list all represents real files
+	var filenames []string
 	for _, filePath := range conf.Paths {
-		if err := tailMultipleFiles(conf, filePath, lines, &wg); err != nil {
+		files, err := filepath.Glob(filePath)
+		if err != nil {
 			return nil, err
 		}
+		filenames = append(filenames, files...)
 	}
-	// close lines when all processors are done
-
-	return lines, nil
-}
-
-func tailMultipleFiles(conf Config, filePath string, lines chan string, wg *sync.WaitGroup) error {
-	files, err := filepath.Glob(filePath)
-	if err != nil {
-		return err
-	}
-	if len(files) > 1 {
+	if len(filenames) > 1 {
 		// when tailing multiple files, force the default statefile use
 		conf.Options.StateFile = ""
 	}
-	for _, file := range files {
-		var realStateFile string
-		if conf.Options.StateFile == "" {
-			baseName := strings.TrimSuffix(file, ".log")
-			realStateFile = baseName + ".leash.state"
+
+	// make our lines channel list; we'll get one channel for each file
+	linesChans := make([]chan string, 0, len(filenames))
+	for _, file := range filenames {
+		var lines chan string
+		if file == "-" {
+			lines = tailStdIn()
 		} else {
-			realStateFile = conf.Options.StateFile
+			stateFile := getStateFile(conf, file)
+			tailer, err := getTailer(conf, file, stateFile)
+			if err != nil {
+				return nil, err
+			}
+			lines = tailSingleFile(tailer, file, stateFile)
 		}
-		if err := tailSingleFile(conf, file, realStateFile, lines, wg); err != nil {
-			return err
-		}
+		linesChans = append(linesChans, lines)
 	}
-	return nil
+
+	return linesChans, nil
 }
 
-func tailSingleFile(conf Config, file string, stateFile string, lines chan string, wg *sync.WaitGroup) error {
+func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan string {
+	lines := make(chan string)
 	// TODO report some metric to indicate whether we're keeping up with the
 	// front of the file, of if it's being written faster than we can send
 	// events
 
-	// tail a real file
-	var loc *tail.SeekInfo // 0 value means start at beginning
-	var reOpen, follow bool = true, true
-	switch conf.Options.ReadFrom {
-	case "start", "beginning":
-		// 0 value for tail.SeekInfo means start at beginning
-	case "end":
-		loc = &tail.SeekInfo{
-			Offset: 0,
-			Whence: 2,
-		}
-	case "last":
-		loc = getStartLocation(stateFile, file)
-	default:
-		errMsg := fmt.Sprintf("unknown option to --read_from: %s",
-			conf.Options.ReadFrom)
-		return errors.New(errMsg)
-	}
-	if conf.Options.Stop {
-		reOpen = false
-		follow = false
-	}
-	tailConf := tail.Config{
-		Location:  loc,
-		ReOpen:    reOpen, // keep reading on rotation, aka tail -F
-		MustExist: true,   // fail if log file doesn't exist
-		Follow:    follow, // don't stop at EOF, aka tail -f
-		Logger:    tail.DiscardingLogger,
-		Poll:      conf.Options.Poll, // use poll instead of inotify
-	}
-	logrus.WithFields(logrus.Fields{
-		"tailConf":  tailConf,
-		"conf":      conf,
-		"statefile": stateFile,
-		"location":  loc,
-	}).Debug("about to call tail.TailFile")
-	t, err := tail.TailFile(file, tailConf)
-	logrus.WithFields(logrus.Fields{"tail": t}).Debug("finished call to TailFile")
-	if err != nil {
-		return err
-	}
 	// TODO this only updates once/sec. On clean shutdown, make sure we write
 	// one last time after stopping reading traffic.
-	go updateStateFile(t, stateFile, file)
-	wg.Add(1)
+	go updateStateFile(tailer, stateFile, file)
+
 	go func() {
-		for line := range t.Lines {
+		for line := range tailer.Lines {
 			if line.Err != nil {
 				// skip errored lines
 				continue
 			}
 			lines <- strings.TrimSpace(line.Text)
 		}
-		wg.Done()
+		close(lines)
 	}()
-	return nil
+	return lines
 }
 
 // tailStdIn is a special case to tail STDIN without any of the
 // fancy stuff that the tail module provides
-func tailStdIn(lines chan string, wg *sync.WaitGroup) error {
+func tailStdIn() chan string {
+	lines := make(chan string)
 	input := bufio.NewReader(os.Stdin)
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		for {
 			line, partialLine, err := input.ReadLine()
 			if err != nil {
@@ -233,8 +141,9 @@ func tailStdIn(lines chan string, wg *sync.WaitGroup) error {
 			}
 			lines <- strings.Join(parts, "")
 		}
+		close(lines)
 	}()
-	return nil
+	return lines
 }
 
 // getStartLocation reads the state file and creates an appropriate start
@@ -292,6 +201,57 @@ func getStartLocation(stateFile string, logfile string) *tail.SeekInfo {
 		Offset: state.Offset,
 		Whence: 0,
 	}
+}
+
+// getTailer configures the *tail.Tail correctly to begin actually tailing the
+// specified file.
+func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
+	// tail a real file
+	var loc *tail.SeekInfo // 0 value means start at beginning
+	var reOpen, follow bool = true, true
+	switch conf.Options.ReadFrom {
+	case "start", "beginning":
+		// 0 value for tail.SeekInfo means start at beginning
+	case "end":
+		loc = &tail.SeekInfo{
+			Offset: 0,
+			Whence: 2,
+		}
+	case "last":
+		loc = getStartLocation(stateFile, file)
+	default:
+		errMsg := fmt.Sprintf("unknown option to --read_from: %s",
+			conf.Options.ReadFrom)
+		return nil, errors.New(errMsg)
+	}
+	if conf.Options.Stop {
+		reOpen = false
+		follow = false
+	}
+	tailConf := tail.Config{
+		Location:  loc,
+		ReOpen:    reOpen, // keep reading on rotation, aka tail -F
+		MustExist: true,   // fail if log file doesn't exist
+		Follow:    follow, // don't stop at EOF, aka tail -f
+		Logger:    tail.DiscardingLogger,
+		Poll:      conf.Options.Poll, // use poll instead of inotify
+	}
+	logrus.WithFields(logrus.Fields{
+		"tailConf":  tailConf,
+		"conf":      conf,
+		"statefile": stateFile,
+		"location":  loc,
+	}).Debug("about to call tail.TailFile")
+	return tail.TailFile(file, tailConf)
+}
+
+// getStateFile returns the filename to use to track honeytail state. If
+// provided in the Config, uses the provided value instead.
+func getStateFile(conf Config, filename string) string {
+	if conf.Options.StateFile != "" {
+		return conf.Options.StateFile
+	}
+	return strings.TrimSuffix(filename, ".log") + ".leash.state"
 }
 
 // updateStateFile updates the state file once per second with the current
