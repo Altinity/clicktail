@@ -211,12 +211,6 @@ func sanityCheckOptions(options *GlobalOptions) {
 		fmt.Println("Statefile can not be set when tailing from multiple files.")
 		usage()
 		os.Exit(1)
-	case len(options.Reqs.LogFiles) > 0:
-		if _, err := os.Stat(options.Reqs.LogFiles[0]); os.IsNotExist(err) {
-			fmt.Printf("Log file specified by --file=%s not found!\n", options.Reqs.LogFiles[0])
-			usage()
-			os.Exit(1)
-		}
 	case options.Tail.StateFile != "":
 		files, err := filepath.Glob(options.Reqs.LogFiles[0])
 		if err != nil {
@@ -230,6 +224,22 @@ func sanityCheckOptions(options *GlobalOptions) {
 			usage()
 			os.Exit(1)
 		}
+	}
+
+	// Final sanity check: input files
+	shouldExit := false
+	for _, f := range options.Reqs.LogFiles {
+		if f == "-" {
+			continue
+		}
+		if files, err := filepath.Glob(f); err != nil || files == nil {
+			fmt.Printf("Log file specified by --file=%s not found!\n", f)
+			shouldExit = true
+		}
+	}
+	if shouldExit {
+		usage()
+		os.Exit(1)
 	}
 }
 
