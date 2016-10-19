@@ -433,6 +433,31 @@ var sqds = []slowQueryData{
 		},
 		timestamp: time.Unix(1364506803, 0),
 	},
+	{ /* 22 */
+		rawE: []string{
+			"# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     1",
+			"# Query_time: 0.000439  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0",
+			"SET timestamp=1476901800;",
+			"select @@session.tx_read_only;",
+			"/rdsdbbin/mysql/bin/mysqld, Version: 5.6.22-log (MySQL Community Server (GPL)). started with:",
+			"Tcp port: 3306  Unix socket: /tmp/mysql.sock",
+			"Time                 Id Command    Argument",
+		},
+		sq: map[string]interface{}{
+			userKey:            "rdsadmin",
+			clientKey:          "localhost",
+			clientIPKey:        "127.0.0.1",
+			queryTimeKey:       0.000439,
+			lockTimeKey:        0.0,
+			rowsSentKey:        1,
+			rowsExaminedKey:    0,
+			queryKey:           "select @@session.tx_read_only",
+			normalizedQueryKey: "select @@session.tx_read_only",
+			statementKey:       "select",
+			tablesKey:          "@@session",
+		},
+		timestamp: time.Unix(1476901800, 0),
+	},
 }
 
 func TestHandleEvent(t *testing.T) {

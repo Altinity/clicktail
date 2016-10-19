@@ -110,6 +110,14 @@ var (
 	reSetTime          = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reQuery            = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
 	reUse              = myRegexp{regexp.MustCompile("^(?i)use ")}
+
+	// if 'flush logs' is run at the mysql prompt (which rds commonly does, apparently) the following shows up in slow query log:
+	//   /usr/local/Cellar/mysql/5.7.12/bin/mysqld, Version: 5.7.12 (Homebrew). started with:
+	//   Tcp port: 3306  Unix socket: /tmp/mysql.sock
+	//   Time                 Id Command    Argument
+	reMySQLVersion       = myRegexp{regexp.MustCompile("/.*, Version: .* .*MySQL Community Server.*")}
+	reMySQLPortSock      = myRegexp{regexp.MustCompile("Tcp port:.* Unix socket:.*")}
+	reMySQLColumnHeaders = myRegexp{regexp.MustCompile("Time.*Id.*Command.*Argument.*")}
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
@@ -286,6 +294,13 @@ func getRole(db *sql.DB) (*string, error) {
 	return &res, nil
 }
 
+func isMySQLHeaderLine(line string) bool {
+	first := line[0]
+	return (first == '/' && reMySQLVersion.MatchString(line)) ||
+		(first == 'T' && reMySQLPortSock.MatchString(line)) ||
+		(first == 'T' && reMySQLColumnHeaders.MatchString(line))
+}
+
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan []string)
@@ -300,7 +315,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
 		lineIsComment := strings.HasPrefix(line, "# ")
-		if !lineIsComment {
+		if !lineIsComment && !isMySQLHeaderLine(line) {
 			// we've finished the comments before the statement and now should slurp
 			// lines until the next comment
 			foundStatement = true
@@ -463,6 +478,8 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 		} else if mg := reSetTime.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			timeFromSet, _ = strconv.ParseInt(mg["unixTime"], 10, 64)
+		} else if isMySQLHeaderLine(line) {
+			// ignore and skip the header lines
 		} else if mg := reQuery.FindStringSubmatchMap(line); mg != nil {
 			query = query + " " + mg["query"]
 			if strings.HasSuffix(query, ";") {
