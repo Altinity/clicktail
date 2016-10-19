@@ -66,11 +66,15 @@ func GetEntries(conf Config) ([]chan string, error) {
 	// expand any globs in the list of files so our list all represents real files
 	var filenames []string
 	for _, filePath := range conf.Paths {
-		files, err := filepath.Glob(filePath)
-		if err != nil {
-			return nil, err
+		if filePath == "-" {
+			filenames = append(filenames, filePath)
+		} else {
+			files, err := filepath.Glob(filePath)
+			if err != nil {
+				return nil, err
+			}
+			filenames = append(filenames, files...)
 		}
-		filenames = append(filenames, files...)
 	}
 	if len(filenames) > 1 {
 		// when tailing multiple files, force the default statefile use
