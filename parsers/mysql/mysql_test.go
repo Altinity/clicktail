@@ -612,8 +612,28 @@ func TestProcessLines(t *testing.T) {
 				"# User@Host: rails[rails] @  [10.252.9.33]",
 				"# Query_time: 0.002280  Lock_time: 0.000023 Rows_sent: 0  Rows_examined: 921",
 				"SET timestamp=1444264264;",
+				"# User@Host: rails[rails] @  [10.252.9.33]",
+				"# Query_time: 0.002280  Lock_time: 0.000023 Rows_sent: 0  Rows_examined: 921",
+				"SET timestamp=1444264264;",
+				"SELECT `certs`.* FROM `certs` WHERE (`certs`.app_id = 993089) LIMIT 1;",
 			},
 			[]event.Event{
+				{
+					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
+					Data: map[string]interface{}{
+						"client":           "",
+						"client_ip":        "10.252.9.33",
+						"user":             "rails",
+						"query_time":       0.002280,
+						"lock_time":        0.000023,
+						"rows_sent":        0,
+						"rows_examined":    921,
+						"query":            "SELECT `certs`.* FROM `certs` WHERE (`certs`.app_id = 993089) LIMIT 1",
+						"normalized_query": "select `certs`.* from `certs` where (`certs`.app_id = ?) limit ?",
+						"tables":           "certs",
+						"statement":        "select",
+					},
+				},
 				{
 					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
 					Data: map[string]interface{}{
