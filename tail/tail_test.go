@@ -36,6 +36,25 @@ func TestTailSingleFile(t *testing.T) {
 	checkLinesChan(t, lines, jsonLines)
 }
 
+func TestTailSTDIN(t *testing.T) {
+	ts := &testSetup{}
+	ts.start(t)
+	defer ts.stop()
+	conf := Config{
+		Options: tailOpts,
+		Paths:   make([]string, 1),
+	}
+	conf.Paths[0] = "-"
+	lineChans, err := GetEntries(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lineChans) != 1 {
+		t.Errorf("lines chans should have had one channel; instead was length %d", len(lineChans))
+	}
+
+}
+
 func TestGetEntries(t *testing.T) {
 	ts := &testSetup{}
 	ts.start(t)
