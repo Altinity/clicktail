@@ -46,13 +46,15 @@ type GlobalOptions struct {
 	StatusInterval uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
 	Backfill       bool `long:"backfill" description:"Configure honeytail to ingest old data in order to backfill Honeycomb. Sets the correct values for --backoff, --tail.read_from, and --tail.stop"`
 
-	ScrubFields    []string `long:"scrub_field" description:"For the field listed, apply a one-way hash to the field content. May be specified multiple times"`
-	DropFields     []string `long:"drop_field" description:"Do not send the field to Honeycomb. May be specified multiple times"`
-	AddFields      []string `long:"add_field" description:"Add the field to every event. Field should be key=val. May be specified multiple times"`
-	RequestShape   []string `long:"request_shape" description:"Identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x' or just the request path. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
-	RequestPattern []string `long:"request_pattern" description:"A pattern for the request path on which to base the derived request_shape. May be specified multiple times. Patterns are considered in order; first match wins."`
-	ShapePrefix    string   `long:"shape_prefix" description:"Prefix to use on fields generated from request_shape to prevent field collision"`
-	BackOff        bool     `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped. When --backfill is set, it will override this option=true"`
+	ScrubFields       []string `long:"scrub_field" description:"For the field listed, apply a one-way hash to the field content. May be specified multiple times"`
+	DropFields        []string `long:"drop_field" description:"Do not send the field to Honeycomb. May be specified multiple times"`
+	AddFields         []string `long:"add_field" description:"Add the field to every event. Field should be key=val. May be specified multiple times"`
+	RequestShape      []string `long:"request_shape" description:"Identify a field that contains an HTTP request of the form 'METHOD /path HTTP/1.x' or just the request path. Break apart that field into subfields that contain components. May be specified multiple times. Defaults to 'request' when using the nginx parser"`
+	ShapePrefix       string   `long:"shape_prefix" description:"Prefix to use on fields generated from request_shape to prevent field collision"`
+	RequestPattern    []string `long:"request_pattern" description:"A pattern for the request path on which to base the derived request_shape. May be specified multiple times. Patterns are considered in order; first match wins."`
+	RequestParseQuery string   `long:"request_parse_query" description:"How to parse the request query parameters. 'whitelist' means only extract listed query keys. 'all' means to extract all query parameters as individual columns" default:"whitelist"`
+	RequestQueryKeys  []string `long:"request_query_keys" description:"Request query parameter key names to extract, when request_parse_query is 'whitelist'. May be specified multiple times."`
+	BackOff           bool     `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped. When --backfill is set, it will override this option=true"`
 
 	Reqs  RequiredOptions `group:"Required Options"`
 	Modes OtherModes      `group:"Other Modes"`
@@ -224,6 +226,10 @@ func sanityCheckOptions(options *GlobalOptions) {
 			usage()
 			os.Exit(1)
 		}
+	case options.RequestParseQuery != "whitelist" && options.RequestParseQuery != "all":
+		fmt.Println("request_parse_query flag must be either 'whitelist' or 'all'.")
+		usage()
+		os.Exit(1)
 	}
 
 	// Final sanity check: input files

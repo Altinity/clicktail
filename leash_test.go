@@ -260,7 +260,7 @@ func TestRequestShapeRaw(t *testing.T) {
 	opts := defaultOptions
 	opts.RequestShape = []string{"request"}
 	opts.RequestPattern = []string{"/about", "/about/:lang", "/about/:lang/books"}
-	urls := map[string]map[string]interface{}{
+	urlsWhitelistQuery := map[string]map[string]interface{}{
 		"GET /about/en/books HTTP/1.1": {
 			"request_method":           "GET",
 			"request_protocol_version": "HTTP/1.1",
@@ -286,25 +286,57 @@ func TestRequestShapeRaw(t *testing.T) {
 			"request_path_lang": "en",
 			"request_shape":     "/about/:lang/books",
 		},
-		"/about/en?foo=bar": {
-			"request_uri":       "/about/en?foo=bar",
+		"/about/en?foo=bar&bar=bar2": {
+			"request_uri":       "/about/en?foo=bar&bar=bar2",
 			"request_path":      "/about/en",
-			"request_query":     "foo=bar",
+			"request_query":     "foo=bar&bar=bar2",
 			"request_query_foo": "bar",
 			"request_path_lang": "en",
-			"request_shape":     "/about/:lang?foo=?",
+			"request_shape":     "/about/:lang?bar=?&foo=?",
 		},
-		"/about/en?foo=bar&baz&foo=bend&foo=alpha": {
-			"request_uri":       "/about/en?foo=bar&baz&foo=bend&foo=alpha",
-			"request_path":      "/about/en",
-			"request_query":     "foo=bar&baz&foo=bend&foo=alpha",
-			"request_query_foo": "alpha, bar, bend",
-			"request_path_lang": "en",
-			"request_shape":     "/about/:lang?baz=?&foo=?&foo=?&foo=?",
+		"/about/en?foo=bar&baz&foo=bend&foo=alpha&bend=beta": {
+			"request_uri":        "/about/en?foo=bar&baz&foo=bend&foo=alpha&bend=beta",
+			"request_path":       "/about/en",
+			"request_query":      "foo=bar&baz&foo=bend&foo=alpha&bend=beta",
+			"request_query_foo":  "alpha, bar, bend",
+			"request_query_bend": "beta",
+			"request_path_lang":  "en",
+			"request_shape":      "/about/:lang?baz=?&bend=?&foo=?&foo=?&foo=?",
 		},
 	}
+	urlsAllQuery := map[string]map[string]interface{}{
+		"/about/en?foo=bar&bar=bar2": {
+			"request_uri":       "/about/en?foo=bar&bar=bar2",
+			"request_path":      "/about/en",
+			"request_query":     "foo=bar&bar=bar2",
+			"request_query_foo": "bar",
+			"request_query_bar": "bar2",
+			"request_path_lang": "en",
+			"request_shape":     "/about/:lang?bar=?&foo=?",
+		},
+	}
+	// test whitelisting keys foo, baz, and bend but not bar
+	opts.RequestQueryKeys = []string{"foo", "baz", "bend"}
 	output := requestShape(reqField, tbs, opts)
-	for input, expectedResult := range urls {
+	for input, expectedResult := range urlsWhitelistQuery {
+		ev := event.Event{
+			Data: map[string]interface{}{
+				reqField: input,
+			},
+		}
+		// feed it the sample event
+		tbs <- ev
+		// get the munged event out
+		res := <-output
+		for evKey, expectedVal := range expectedResult {
+			testEquals(t, res.Data[evKey], expectedVal)
+		}
+	}
+	// change the query parsing rules and get a new output channel - bar should be
+	// included
+	opts.RequestParseQuery = "all"
+	output = requestShape(reqField, tbs, opts)
+	for input, expectedResult := range urlsAllQuery {
 		ev := event.Event{
 			Data: map[string]interface{}{
 				reqField: input,

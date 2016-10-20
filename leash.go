@@ -268,12 +268,12 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 				ev.Data[prefix+field+"_path"] = res.Path
 				ev.Data[prefix+field+"_query"] = res.Query
 				for k, v := range res.QueryFields {
-					if len(v) == 0 {
-						ev.Data[prefix+field+"_query_"+k] = ""
-					} else if len(v) == 1 {
-						ev.Data[prefix+field+"_query_"+k] = v[0]
-					} else {
-						sort.Strings(v)
+					// only include the keys we want
+					if options.RequestParseQuery == "all" ||
+						whitelistKey(options.RequestQueryKeys, k) {
+						if len(v) > 1 {
+							sort.Strings(v)
+						}
 						ev.Data[prefix+field+"_query_"+k] = strings.Join(v, ", ")
 					}
 				}
@@ -287,6 +287,16 @@ func requestShape(field string, toBeSent chan event.Event, options GlobalOptions
 		close(newSent)
 	}()
 	return newSent
+}
+
+// return true if the key is in the whitelist
+func whitelistKey(whiteKeys []string, key string) bool {
+	for _, whiteKey := range whiteKeys {
+		if key == whiteKey {
+			return true
+		}
+	}
+	return false
 }
 
 // sendToLibhoney reads from the toBeSent channel and shoves the events into
