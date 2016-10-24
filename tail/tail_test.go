@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -84,6 +85,63 @@ func TestGetEntries(t *testing.T) {
 	}
 	for i, ch := range chanArr {
 		checkLinesChan(t, ch, jsonLines[i])
+	}
+
+	// test that if all statefile-like filenames and missing files are removed
+	// from the list, it errors
+	fn1 := ts.tmpdir + "/sparklestate"
+	ts.writeFile(t, fn1, "body")
+	fn2 := ts.tmpdir + "/foo.leash.state"
+	ts.writeFile(t, fn2, "body")
+	conf = Config{
+		Paths: []string{fn1, fn2, "/file/does/not/exist"},
+		Options: TailOptions{
+			StateFile: fn1,
+		},
+	}
+	nilChan, err := GetEntries(conf)
+	if nilChan != nil {
+		t.Error("errored getEntries was supposed to respond with a nil channel list")
+	}
+	if err == nil {
+		t.Error("expected error from GetEntries; got nil instead.")
+	}
+}
+
+func TestRemoveStateFiles(t *testing.T) {
+	files := []string{
+		"foo.bar",
+		"/bar.baz",
+		"bar.leash.state",
+		"myspecialstatefile",
+		"baz.foo",
+	}
+	expectedFilesNoStatefile := []string{
+		"foo.bar",
+		"/bar.baz",
+		"myspecialstatefile",
+		"baz.foo",
+	}
+	expectedFilesConfStatefile := []string{
+		"foo.bar",
+		"/bar.baz",
+		"baz.foo",
+	}
+	conf := Config{
+		Options: TailOptions{},
+	}
+	newFiles := removeStateFiles(files, conf)
+	if !reflect.DeepEqual(newFiles, expectedFilesNoStatefile) {
+		t.Errorf("expected %v, instead got %v", expectedFilesNoStatefile, newFiles)
+	}
+	conf = Config{
+		Options: TailOptions{
+			StateFile: "myspecialstatefile",
+		},
+	}
+	newFiles = removeStateFiles(files, conf)
+	if !reflect.DeepEqual(newFiles, expectedFilesConfStatefile) {
+		t.Errorf("expected %v, instead got %v", expectedFilesConfStatefile, newFiles)
 	}
 }
 

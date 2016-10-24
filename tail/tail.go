@@ -73,12 +73,16 @@ func GetEntries(conf Config) ([]chan string, error) {
 			if err != nil {
 				return nil, err
 			}
+			files = removeStateFiles(files, conf)
 			filenames = append(filenames, files...)
 		}
 	}
 	if len(filenames) > 1 {
 		// when tailing multiple files, force the default statefile use
 		conf.Options.StateFile = ""
+	}
+	if len(filenames) == 0 {
+		return nil, errors.New("After removing missing files and state files from the list, there are no files left to tail")
 	}
 
 	// make our lines channel list; we'll get one channel for each file
@@ -99,6 +103,30 @@ func GetEntries(conf Config) ([]chan string, error) {
 	}
 
 	return linesChans, nil
+}
+
+// removeStateFiles goes through the list of files and removes any that appear
+// to be statefiles to avoid .leash.state.leash.state.leash.state from appearing
+// when you use an overly permissive glob
+func removeStateFiles(files []string, conf Config) []string {
+	newFiles := []string{}
+	for _, file := range files {
+		if file == conf.Options.StateFile {
+			logrus.WithFields(logrus.Fields{
+				"file": file,
+			}).Debug("skipping tailing file because it is named the same as the statefile flag")
+			continue
+		}
+		if strings.HasSuffix(file, ".leash.state") {
+			logrus.WithFields(logrus.Fields{
+				"file": file,
+			}).Debug("skipping tailing file because the filename ends with .leash.state")
+			continue
+		}
+		// great! it's not a state file. let's use it.
+		newFiles = append(newFiles, file)
+	}
+	return newFiles
 }
 
 func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan string {
