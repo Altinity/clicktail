@@ -9,28 +9,31 @@ import (
 )
 
 const (
-	CONTROL             = "2010-01-02T12:34:56.000Z I CONTROL [conn123456789] git version fooooooo"
-	UBUNTU_3_2_9_INSERT = `2016-09-14T23:39:23.450+0000 I COMMAND  [conn68] command protecteddb.comedy command: insert { insert: "comedy", documents: [ { _id: ObjectId('57d9dfab9fc9998ce4e0c072'), name: "Bill & Ted's Excellent Adventure", year: 1989.0, extrakey: "benisawesome" } ], ordered: true } ninserted:1 keyUpdates:0 writeConflicts:0 numYields:0 reslen:25 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } protocol:op_command 0ms`
-	UBUNTU_3_2_9_FIND   = `2016-09-15T00:01:55.387+0000 I COMMAND [conn93] command protecteddb.comedy command: find { find: "comedy", filter: { $where: "this.year > 2000" } } planSummary: COLLSCAN keysExamined:0 docsExamined:5 cursorExhausted:1 keyUpdates:0 writeConflicts:0 numYields:0 nreturned:2 reslen:245 locks:{ Global: { acquireCount: { r: 7, w: 1 } }, Database: { acquireCount: { r: 3, w: 1 } }, Collection: { acquireCount: { r: 3, w: 1 } }, Metadata: { acquireCount: { W: 1 } } } protocol:op_command 29ms`
-	UBUNTU_3_2_9_UPDATE = `2016-09-14T23:36:36.793+0000 I WRITE [conn61] update protecteddb.comedy query: { name: "Hulk" } update: { $unset: { cast: 1.0 } } keysExamined:0 docsExamined:4 nMatched:0 nModified:0 keyUpdates:0 writeConflicts:0 numYields:0 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } 0ms`
-	UBUNTU_2_6_FIND     = `2016-09-15T02:38:10.395-0400 [conn1579035] query starfruit_production.users query: { $query: { altemails: { $in: [ "REDACTED@domain.org" ] } }, $orderby: { _id: 1 } } planSummary: IXSCAN { _id: 1 } ntoskip:0 nscanned:67439 nscannedObjects:67439 keyUpdates:0 numYields:1 locks(micros) r:114782 nreturned:0 reslen:20 105ms`
-	UBUNTU_2_4_FIND     = `Tue Sep 13 21:10:33.961 [TTLMonitor] query btest.system.indexes query: { expireAfterSeconds: { $exists: true } } ntoreturn:0 ntoskip:0 nscanned:1 keyUpdates:0 locks(micros) r:60 nreturned:0 reslen:20 0ms`
-	OSX_3_2_9_AGGREGATE = `2016-09-14T14:46:13.879-0700 I COMMAND [conn1] command testtest.zips command: aggregate { aggregate: "zips", pipeline: [ { $group: { _id: "$state", totalPop: { $sum: "$pop" } } }, { $match: { totalPop: { $gte: 10000000.0 } } } ], cursor: {} } keyUpdates:0 writeConflicts:0 numYields:229 reslen:342 locks:{ Global: { acquireCount: { r: 466 } }, Database: { acquireCount: { r: 233 } }, Collection: { acquireCount: { r: 233 } } } protocol:op_command 34ms`
-	HEARTBEAT           = `Sun Sep 18 07:20:03.246 [conn123456789] command admin.$cmd command: replSetHeartbeat { replSetHeartbeat: "replica-set-here", from: "host:port" } ntoreturn:1 keyUpdates:0 numYields:0  reslen:100 0ms`
-	NESTED_QUOTES       = `2016-09-20T14:55:06.189-0400 [conn2915444] update namespace.collection query: { _id: ObjectId('51abe5b6c') } update: { $set: { recent_data: [ { id: ObjectId('57e1860'), msg: "Nietzsche said "For what constitutes the tremendous historical uniqueness of that Persian is just the opposite of this."" } ] } } nscanned:1 nscannedObjects:1 nMatched:1 nModified:1 keyUpdates:0 numYields:0 locks(micros) w:393 0ms`
-	T1_STRING           = "2010-01-02T12:34:56.000Z"
+	CONTROL                = "2010-01-02T12:34:56.000Z I CONTROL [conn123456789] git version fooooooo"
+	UBUNTU_3_2_9_INSERT    = `2016-09-14T23:39:23.450+0000 I COMMAND  [conn68] command protecteddb.comedy command: insert { insert: "comedy", documents: [ { _id: ObjectId('57d9dfab9fc9998ce4e0c072'), name: "Bill & Ted's Excellent Adventure", year: 1989.0, extrakey: "benisawesome" } ], ordered: true } ninserted:1 keyUpdates:0 writeConflicts:0 numYields:0 reslen:25 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } protocol:op_command 0ms`
+	UBUNTU_3_2_9_FIND      = `2016-09-15T00:01:55.387+0000 I COMMAND [conn93] command protecteddb.comedy command: find { find: "comedy", filter: { $where: "this.year > 2000" } } planSummary: COLLSCAN keysExamined:0 docsExamined:5 cursorExhausted:1 keyUpdates:0 writeConflicts:0 numYields:0 nreturned:2 reslen:245 locks:{ Global: { acquireCount: { r: 7, w: 1 } }, Database: { acquireCount: { r: 3, w: 1 } }, Collection: { acquireCount: { r: 3, w: 1 } }, Metadata: { acquireCount: { W: 1 } } } protocol:op_command 29ms`
+	UBUNTU_3_2_9_UPDATE    = `2016-09-14T23:36:36.793+0000 I WRITE [conn61] update protecteddb.comedy query: { name: "Hulk" } update: { $unset: { cast: 1.0 } } keysExamined:0 docsExamined:4 nMatched:0 nModified:0 keyUpdates:0 writeConflicts:0 numYields:0 locks:{ Global: { acquireCount: { r: 1, w: 1 } }, Database: { acquireCount: { w: 1 } }, Collection: { acquireCount: { w: 1 } } } 0ms`
+	UBUNTU_2_6_FIND        = `2016-09-15T02:38:10.395-0400 [conn1579035] query starfruit_production.users query: { $query: { altemails: { $in: [ "REDACTED@domain.org" ] } }, $orderby: { _id: 1 } } planSummary: IXSCAN { _id: 1 } ntoskip:0 nscanned:67439 nscannedObjects:67439 keyUpdates:0 numYields:1 locks(micros) r:114782 nreturned:0 reslen:20 105ms`
+	UBUNTU_2_4_FIND        = `Tue Sep 13 21:10:33.961 [TTLMonitor] query btest.system.indexes query: { expireAfterSeconds: { $exists: true } } ntoreturn:0 ntoskip:0 nscanned:1 keyUpdates:0 locks(micros) r:60 nreturned:0 reslen:20 0ms`
+	OSX_3_2_9_AGGREGATE    = `2016-09-14T14:46:13.879-0700 I COMMAND [conn1] command testtest.zips command: aggregate { aggregate: "zips", pipeline: [ { $group: { _id: "$state", totalPop: { $sum: "$pop" } } }, { $match: { totalPop: { $gte: 10000000.0 } } } ], cursor: {} } keyUpdates:0 writeConflicts:0 numYields:229 reslen:342 locks:{ Global: { acquireCount: { r: 466 } }, Database: { acquireCount: { r: 233 } }, Collection: { acquireCount: { r: 233 } } } protocol:op_command 34ms`
+	HEARTBEAT              = `Sun Sep 18 07:20:03.246 [conn123456789] command admin.$cmd command: replSetHeartbeat { replSetHeartbeat: "replica-set-here", from: "host:port" } ntoreturn:1 keyUpdates:0 numYields:0  reslen:100 0ms`
+	NESTED_QUOTES          = `2016-09-20T14:55:06.189-0400 [conn2915444] update namespace.collection query: { _id: ObjectId('51abe5b6c') } update: { $set: { recent_data: [ { id: ObjectId('57e1860'), msg: "Nietzsche said "For what constitutes the tremendous historical uniqueness of that Persian is just the opposite of this."" } ] } } nscanned:1 nscannedObjects:1 nMatched:1 nModified:1 keyUpdates:0 numYields:0 locks(micros) w:393 0ms`
+	UBUNTU_3_0_KILLCURSORS = `2016-09-20T14:55:06.189-0400 I QUERY [conn924267662] killcursors keyUpdates:0 writeConflicts:0 numYields:0 locks:{ Global: { acquireCount: { r: 2 } }, Database: { acquireCount: { r: 1 } }, Collection: { acquireCount: { r: 1 } } } user_key_comparison_count:0 block_cache_hit_count:0 block_read_count:0 block_read_byte:0 internal_key_skipped_count:0 internal_delete_skipped_count:0 get_from_memtable_count:0 seek_on_memtable_count:0 seek_child_seek_count:0 0ms`
+
+	T1_STRING = "2010-01-02T12:34:56.000Z"
 )
 
 var (
-	T1                          = time.Date(2010, time.January, 2, 12, 34, 56, 0, time.UTC)
-	UBUNTU_3_2_9_INSERT_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-14T23:39:23.450+0000")
-	UBUNTU_3_2_9_FIND_TIME, _   = time.Parse(iso8601LocalTimeFormat, "2016-09-15T00:01:55.387+0000")
-	UBUNTU_3_2_9_UPDATE_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-14T23:36:36.793+0000")
-	HEARTBEAT_TIME, _           = time.Parse(ctimeTimeFormat, "Sun Sep 18 07:20:03.246")
-	UBUNTU_2_4_FIND_TIME, _     = time.Parse(ctimeTimeFormat, "Tue Sep 13 21:10:33.961")
-	UBUNTU_2_6_FIND_TIME, _     = time.Parse(iso8601LocalTimeFormat, "2016-09-15T02:38:10.395-0400")
-	OSX_3_2_9_AGGREGATE_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-14T14:46:13.879-0700")
-	NESTED_QUOTES_TIME, _       = time.Parse(iso8601LocalTimeFormat, "2016-09-20T14:55:06.189-0400")
+	T1                             = time.Date(2010, time.January, 2, 12, 34, 56, 0, time.UTC)
+	UBUNTU_3_2_9_INSERT_TIME, _    = time.Parse(iso8601LocalTimeFormat, "2016-09-14T23:39:23.450+0000")
+	UBUNTU_3_2_9_FIND_TIME, _      = time.Parse(iso8601LocalTimeFormat, "2016-09-15T00:01:55.387+0000")
+	UBUNTU_3_2_9_UPDATE_TIME, _    = time.Parse(iso8601LocalTimeFormat, "2016-09-14T23:36:36.793+0000")
+	HEARTBEAT_TIME, _              = time.Parse(ctimeTimeFormat, "Sun Sep 18 07:20:03.246")
+	UBUNTU_2_4_FIND_TIME, _        = time.Parse(ctimeTimeFormat, "Tue Sep 13 21:10:33.961")
+	UBUNTU_2_6_FIND_TIME, _        = time.Parse(iso8601LocalTimeFormat, "2016-09-15T02:38:10.395-0400")
+	OSX_3_2_9_AGGREGATE_TIME, _    = time.Parse(iso8601LocalTimeFormat, "2016-09-14T14:46:13.879-0700")
+	NESTED_QUOTES_TIME, _          = time.Parse(iso8601LocalTimeFormat, "2016-09-20T14:55:06.189-0400")
+	UBUNTU_3_0_KILLCURSORS_TIME, _ = time.Parse(iso8601LocalTimeFormat, "2016-09-20T14:55:06.189-0400")
 )
 
 type processed struct {
@@ -267,6 +270,19 @@ func TestProcessLines(t *testing.T) {
 				time: NESTED_QUOTES_TIME,
 				includeData: map[string]interface{}{
 					"duration_ms": 0.0,
+				},
+				excludeKeys: []string{},
+			},
+		},
+
+		{
+			line: UBUNTU_3_0_KILLCURSORS,
+			expected: processed{
+				time: UBUNTU_3_0_KILLCURSORS_TIME,
+				includeData: map[string]interface{}{
+					"duration_ms": 0.0,
+					"operation":   "killcursors",
+					"component":   "QUERY",
 				},
 				excludeKeys: []string{},
 			},
