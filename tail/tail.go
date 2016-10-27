@@ -158,6 +158,7 @@ func tailStdIn() chan string {
 	lines := make(chan string)
 	input := bufio.NewReader(os.Stdin)
 	go func() {
+		defer close(lines)
 		for {
 			line, partialLine, err := input.ReadLine()
 			if err != nil {
@@ -173,7 +174,6 @@ func tailStdIn() chan string {
 			}
 			lines <- strings.Join(parts, "")
 		}
-		close(lines)
 	}()
 	return lines
 }
