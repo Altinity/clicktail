@@ -26,6 +26,15 @@ const (
 	collectionFieldName  = "collection"
 	locksFieldName       = "locks"
 	locksMicrosFieldName = "locks(micros)"
+
+	shardingChangelogFieldName   = "sharding_changelog"
+	changelogWhatFieldName       = "changelog_what"
+	changelogChangeIDFieldName   = "changelog_changeid"
+	changelogPrimaryFieldName    = "changelog_primary"
+	changelogServerFieldName     = "changelog_server"
+	changelogClientAddrFieldName = "changelog_client_addr"
+	changelogTimeFieldName       = "changelog_time"
+	changelogDetailsFieldName    = "changelog_details"
 )
 
 var timestampFormats = []string{
@@ -75,6 +84,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 				logFailure(line, err, "couldn't parse logline timestamp, skipping")
 				continue
 			}
+			if err = p.decomposeSharding(values); err != nil {
+				logFailure(line, err, "couldn't decompose sharding changelog, skipping")
+				continue
+			}
 			if err = p.decomposeNamespace(values); err != nil {
 				logFailure(line, err, "couldn't decompose logline namespace, skipping")
 				continue
@@ -87,6 +100,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 				logFailure(line, err, "couldn't decompose logline locks(micros), skipping")
 				continue
 			}
+
+			p.getCommandQuery(values)
 
 			if q, ok := values["query"].(map[string]interface{}); ok {
 				if _, ok = values["normalized_query"]; !ok {
@@ -158,6 +173,45 @@ func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error
 	}
 
 	return time.Time{}, errors.New("timestamp missing from logline")
+}
+
+func (p *Parser) decomposeSharding(values map[string]interface{}) error {
+	clValue, ok := values[shardingChangelogFieldName]
+	if !ok {
+		return nil
+	}
+	clMap, ok := clValue.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	var val interface{}
+	if val, ok = clMap["ns"]; ok {
+		values[namespaceFieldName] = val
+	}
+	if val, ok = clMap["_id"]; ok {
+		values[changelogChangeIDFieldName] = val
+	}
+	if val, ok = clMap["server"]; ok {
+		values[changelogServerFieldName] = val
+	}
+	if val, ok = clMap["clientAddr"]; ok {
+		values[changelogClientAddrFieldName] = val
+	}
+	if val, ok = clMap["time"]; ok {
+		values[changelogTimeFieldName] = val
+	}
+	if val, ok = clMap["what"]; ok {
+		values[changelogWhatFieldName] = val
+	}
+	detailsMap, ok := clMap["details"].(map[string]interface{})
+	if ok {
+		values[changelogDetailsFieldName] = detailsMap
+		values[changelogPrimaryFieldName] = detailsMap["primary"]
+	}
+
+	delete(values, shardingChangelogFieldName)
+	return nil
 }
 
 func (p *Parser) decomposeNamespace(values map[string]interface{}) error {
@@ -243,6 +297,89 @@ func (p *Parser) decomposeLocksMicros(values map[string]interface{}) error {
 	}
 	delete(values, locksMicrosFieldName)
 	return nil
+}
+
+func (p *Parser) getCommandQuery(values map[string]interface{}) {
+	if commandType, ok := values["command_type"]; ok {
+		if cmd, ok := values["command"].(map[string]interface{}); ok {
+			switch commandType {
+			case "find":
+				q, ok := cmd["filter"].(map[string]interface{})
+				if ok {
+					// skip the $where queries, since those are
+					// strings with embedded javascript expressions
+					if _, ok = q["$where"]; !ok {
+						values["query"] = q
+					}
+				}
+				break
+			case "findAndModify":
+				q, ok := cmd["query"]
+				if ok {
+					values["query"] = q
+				}
+				break
+			case "update":
+				// update is special in that each update log can contain multiple update statements.
+				// we build up a synthetic query that includes the entirety of the update list (with
+				// modifications so that the normalizer will include more info.)
+				updates, ok := cmd["updates"].([]interface{})
+				if ok {
+					fakeQuery := make(map[string]interface{})
+					var newUpdates []interface{}
+					for _, _update := range updates {
+						update, ok := _update.(map[string]interface{})
+						if !ok {
+							continue
+						}
+
+						newU := make(map[string]interface{})
+						if q, ok := update["q"]; ok {
+							newU["$query"] = q
+						}
+						if u, ok := update["u"]; ok {
+							newU["$update"] = u
+						}
+						if setOnInsert, ok := update["$setOnInsert"]; ok {
+							newU["$setOnInsert"] = setOnInsert
+						}
+
+						newUpdates = append(newUpdates, newU)
+					}
+					fakeQuery["updates"] = newUpdates
+					values["query"] = fakeQuery
+				}
+				break
+			case "delete":
+				// same treatment as with update above
+				deletes, ok := cmd["deletes"].([]interface{})
+				if ok {
+					fakeQuery := make(map[string]interface{})
+					var newDeletes []interface{}
+					for _, _del := range deletes {
+						del, ok := _del.(map[string]interface{})
+						if !ok {
+							continue
+						}
+
+						newD := make(map[string]interface{})
+						if q, ok := del["q"]; ok {
+							newD["$query"] = q
+						}
+						if lim, ok := del["limit"]; ok {
+							newD["$limit"] = lim
+						}
+
+						newDeletes = append(newDeletes, newD)
+					}
+					fakeQuery["deletes"] = newDeletes
+					values["query"] = fakeQuery
+				}
+				break
+			}
+
+		}
+	}
 }
 
 func logFailure(line string, err error, msg string) {

@@ -255,7 +255,6 @@ func TestAddField(t *testing.T) {
 }
 
 func TestRequestShapeRaw(t *testing.T) {
-	tbs := make(chan event.Event)
 	reqField := "request"
 	opts := defaultOptions
 	opts.RequestShape = []string{"request"}
@@ -317,6 +316,7 @@ func TestRequestShapeRaw(t *testing.T) {
 	}
 	// test whitelisting keys foo, baz, and bend but not bar
 	opts.RequestQueryKeys = []string{"foo", "baz", "bend"}
+	tbs := make(chan event.Event)
 	output := requestShape(reqField, tbs, opts)
 	for input, expectedResult := range urlsWhitelistQuery {
 		ev := event.Event{
@@ -332,9 +332,12 @@ func TestRequestShapeRaw(t *testing.T) {
 			testEquals(t, res.Data[evKey], expectedVal)
 		}
 	}
+	close(tbs)
+
 	// change the query parsing rules and get a new output channel - bar should be
 	// included
 	opts.RequestParseQuery = "all"
+	tbs = make(chan event.Event)
 	output = requestShape(reqField, tbs, opts)
 	for input, expectedResult := range urlsAllQuery {
 		ev := event.Event{
@@ -350,6 +353,7 @@ func TestRequestShapeRaw(t *testing.T) {
 			testEquals(t, res.Data[evKey], expectedVal)
 		}
 	}
+	close(tbs)
 }
 
 func TestSampleRate(t *testing.T) {
