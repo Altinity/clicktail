@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/charity/gonx"
+	"github.com/honeycombio/gonx"
 	flag "github.com/jessevdk/go-flags"
 
 	"github.com/honeycombio/honeytail/event"
