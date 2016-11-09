@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -53,7 +54,6 @@ func TestTailSTDIN(t *testing.T) {
 	if len(lineChans) != 1 {
 		t.Errorf("lines chans should have had one channel; instead was length %d", len(lineChans))
 	}
-
 }
 
 func TestGetEntries(t *testing.T) {
@@ -142,6 +142,48 @@ func TestRemoveStateFiles(t *testing.T) {
 	newFiles = removeStateFiles(files, conf)
 	if !reflect.DeepEqual(newFiles, expectedFilesConfStatefile) {
 		t.Errorf("expected %v, instead got %v", expectedFilesConfStatefile, newFiles)
+	}
+}
+
+func TestGetStateFile(t *testing.T) {
+	ts := &testSetup{}
+	ts.start(t)
+	defer ts.stop()
+
+	conf := Config{
+		Paths:   make([]string, 3),
+		Options: tailOpts,
+	}
+
+	filename := "foobar.log"
+	statefilename := "foobar.leash.state"
+
+	existingStateFile := filepath.Join(ts.tmpdir, "existing.state")
+	ts.writeFile(t, existingStateFile, "")
+	newStateFile := filepath.Join(ts.tmpdir, "new.state")
+
+	tsts := []struct {
+		stateFileConfig string
+		numFiles        int
+		expected        string
+	}{
+		{existingStateFile, 1, existingStateFile},
+		{existingStateFile, 2, filepath.Join(os.TempDir(), statefilename)},
+		{newStateFile, 1, newStateFile},
+		{newStateFile, 2, filepath.Join(os.TempDir(), statefilename)},
+		{ts.tmpdir, 1, filepath.Join(ts.tmpdir, statefilename)},
+		{ts.tmpdir, 2, filepath.Join(ts.tmpdir, statefilename)},
+		{"", 1, filepath.Join(os.TempDir(), statefilename)},
+		{"", 2, filepath.Join(os.TempDir(), statefilename)},
+	}
+
+	for _, tt := range tsts {
+		conf.Options.StateFile = tt.stateFileConfig
+		actual := getStateFile(conf, filename, tt.numFiles)
+		if actual != tt.expected {
+			t.Errorf("getStateFile with config statefile: %s\n\tgot: %s, expected: %s",
+				tt.stateFileConfig, actual, tt.expected)
+		}
 	}
 }
 

@@ -77,22 +77,19 @@ func GetEntries(conf Config) ([]chan string, error) {
 			filenames = append(filenames, files...)
 		}
 	}
-	if len(filenames) > 1 {
-		// when tailing multiple files, force the default statefile use
-		conf.Options.StateFile = ""
-	}
 	if len(filenames) == 0 {
 		return nil, errors.New("After removing missing files and state files from the list, there are no files left to tail")
 	}
 
 	// make our lines channel list; we'll get one channel for each file
 	linesChans := make([]chan string, 0, len(filenames))
+	numFiles := len(filenames)
 	for _, file := range filenames {
 		var lines chan string
 		if file == "-" {
 			lines = tailStdIn()
 		} else {
-			stateFile := getStateFile(conf, file)
+			stateFile := getStateFile(conf, file, numFiles)
 			tailer, err := getTailer(conf, file, stateFile)
 			if err != nil {
 				return nil, err
@@ -135,9 +132,21 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan strin
 	// front of the file, of if it's being written faster than we can send
 	// events
 
-	// TODO this only updates once/sec. On clean shutdown, make sure we write
-	// one last time after stopping reading traffic.
-	go updateStateFile(tailer, stateFile, file)
+	stateFh, err := os.OpenFile(stateFile, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		logrus.WithFields(logrus.Fields{
+			"logfile":   file,
+			"statefile": stateFile,
+		}).Warn("Failed to open statefile for writing. File location will not be saved.")
+	}
+
+	ticker := time.NewTimer(time.Second)
+	state := State{}
+	go func() {
+		for range ticker.C {
+			updateStateFile(&state, tailer, file, stateFh)
+		}
+	}()
 
 	go func() {
 		for line := range tailer.Lines {
@@ -148,6 +157,9 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan strin
 			lines <- strings.TrimSpace(line.Text)
 		}
 		close(lines)
+		ticker.Stop()
+		updateStateFile(&state, tailer, file, stateFh)
+		stateFh.Close()
 	}()
 	return lines
 }
@@ -277,44 +289,59 @@ func getTailer(conf Config, file string, stateFile string) (*tail.Tail, error) {
 	return tail.TailFile(file, tailConf)
 }
 
-// getStateFile returns the filename to use to track honeytail state. If
-// provided in the Config, uses the provided value instead.
-func getStateFile(conf Config, filename string) string {
+// getStateFile returns the filename to use to track honeytail state.
+//
+// If a --tail.statefile parameter is provided, we try to respect it.
+// It might describe an existing file, an existing directory, or a new path.
+//
+// If tailing a single logfile, we will use the specified --tail.statefile:
+// - if it points to an existing file, that statefile will be used directly
+// - if it points to a new path, that path will be written to directly
+// - if it points to an existing directory, the statefile will be placed inside
+//   the directory (and the statefile's name will be derived from the logfile).
+//
+// If honeytail is asked to tail multiple files, we will only respect the
+// third case, where --tail.statefile describes an existing directory.
+//
+// The default behavior (or if --tail.statefile isn't respected) will be to
+// write to the system's $TMPDIR/ and write to a statefile (where the name will
+// be derived from the logfile).
+func getStateFile(conf Config, filename string, numFiles int) string {
+	confStateFile := os.TempDir()
 	if conf.Options.StateFile != "" {
-		return conf.Options.StateFile
+		info, err := os.Stat(conf.Options.StateFile)
+		if numFiles == 1 && (os.IsNotExist(err) || (err == nil && !info.IsDir())) {
+			return conf.Options.StateFile
+		} else if err == nil && info.IsDir() {
+			// If the --tail.statefile is a directory, write statefile inside the specified directory
+			confStateFile = conf.Options.StateFile
+		} else {
+			logrus.Debugf("Couldn't write to --tail.statefile=%s, writing honeytail state for %s to $TMPDIR (%s) instead.",
+				conf.Options.StateFile, filename, confStateFile)
+		}
 	}
-	return strings.TrimSuffix(filename, ".log") + ".leash.state"
+
+	stateFileName := strings.TrimSuffix(filepath.Base(filename), ".log") + ".leash.state"
+	return filepath.Join(confStateFile, stateFileName)
 }
 
 // updateStateFile updates the state file once per second with the current
 // values for the logfile's inode number and offset
-func updateStateFile(t *tail.Tail, stateFile string, file string) {
-	statefh, err := os.OpenFile(stateFile, os.O_RDWR|os.O_CREATE, 0644)
+func updateStateFile(state *State, t *tail.Tail, file string, stateFh *os.File) {
+	logStat := unix.Stat_t{}
+	unix.Stat(file, &logStat)
+	currentPos, err := t.Tell()
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"logfile":   file,
-			"statefile": stateFile,
-		}).Warn("Failed to open statefile for writing. File location will not be saved.")
 		return
 	}
-	ticker := time.NewTicker(time.Second)
-	state := State{}
-	for _ = range ticker.C {
-		logStat := unix.Stat_t{}
-		unix.Stat(file, &logStat)
-		currentPos, err := t.Tell()
-		if err != nil {
-			continue
-		}
-		state.INode = logStat.Ino
-		state.Offset = currentPos
-		out, err := json.Marshal(state)
-		if err != nil {
-			continue
-		}
-		statefh.Truncate(0)
-		out = append(out, '\n')
-		statefh.WriteAt(out, 0)
-		statefh.Sync()
+	state.INode = logStat.Ino
+	state.Offset = currentPos
+	out, err := json.Marshal(state)
+	if err != nil {
+		return
 	}
+	stateFh.Truncate(0)
+	out = append(out, '\n')
+	stateFh.WriteAt(out, 0)
+	stateFh.Sync()
 }

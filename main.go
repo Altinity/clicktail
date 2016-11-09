@@ -209,23 +209,6 @@ func sanityCheckOptions(options *GlobalOptions) {
 		fmt.Println("Reading from the end and stopping when we get there. Zero lines to process. Ok, all done! ;)")
 		usage()
 		os.Exit(1)
-	case len(options.Reqs.LogFiles) > 1 && options.Tail.StateFile != "":
-		fmt.Println("Statefile can not be set when tailing from multiple files.")
-		usage()
-		os.Exit(1)
-	case options.Tail.StateFile != "":
-		files, err := filepath.Glob(options.Reqs.LogFiles[0])
-		if err != nil {
-			fmt.Printf("Trying to glob log file %s failed: %+v\n",
-				options.Reqs.LogFiles[0], err)
-			usage()
-			os.Exit(1)
-		}
-		if len(files) > 1 {
-			fmt.Println("Statefile can not be set when tailing from multiple files.")
-			usage()
-			os.Exit(1)
-		}
 	case options.RequestParseQuery != "whitelist" && options.RequestParseQuery != "all":
 		fmt.Println("request_parse_query flag must be either 'whitelist' or 'all'.")
 		usage()

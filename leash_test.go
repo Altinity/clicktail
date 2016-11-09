@@ -401,6 +401,7 @@ func TestReadFromOffset(t *testing.T) {
 	}
 	opts.Reqs.LogFiles = []string{offsetLogFile}
 	opts.Tail.ReadFrom = "last"
+	opts.Tail.StateFile = offsetStateFile
 	osf, _ := os.Create(offsetStateFile)
 	defer osf.Close()
 	fmt.Fprintf(osf, `{"INode":%d,"Offset":38}`, logStat.Ino)
