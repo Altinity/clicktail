@@ -181,20 +181,20 @@ func TestSetVersion(t *testing.T) {
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(opts)
 	userAgent := ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.1")
+	testEquals(t, userAgent, "libhoney-go/1.1.2")
 	setVersion(false)
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.1 honeytail/dev")
+	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/dev")
 	BuildID = "test"
 	setVersion(false)
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.1 honeytail/test")
+	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/test")
 	setVersion(true)
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.1 honeytail/test backfill")
+	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/test backfill")
 }
 
 func TestDropField(t *testing.T) {
@@ -365,24 +365,37 @@ func TestSampleRate(t *testing.T) {
 	sampleLogFile := ts.tmpdir + "/sample.log"
 	logfh, _ := os.Create(sampleLogFile)
 	defer logfh.Close()
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 50; i++ {
 		fmt.Fprintf(logfh, `{"format":"json%d"}`+"\n", i)
 	}
 	opts.Reqs.LogFiles = []string{sampleLogFile}
+	opts.TailSample = false
 	run(opts)
-	// with no sampling, 1000 lines -> 1000 requests
-	testEquals(t, ts.rsp.reqCounter, 100)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json99"}`)
+	// with no sampling, 50 lines -> 50 requests
+	testEquals(t, ts.rsp.reqCounter, 50)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json49"}`)
 	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "1")
-	opts.SampleRate = 20
+
 	ts.rsp.reset()
+	opts.SampleRate = 3
 	run(opts)
-	// setting a sample rate of 20 and a rand seed of 1, 49 requests.
-	testEquals(t, ts.rsp.reqCounter, 7)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json98"}`)
+	// setting a sample rate of 3 and a rand seed of 1, 16 requests.
+	// libhoney does the sampling
+	testEquals(t, ts.rsp.reqCounter, 16)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json47"}`)
 	sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
-	testEquals(t, sampleRate, "20")
+	testEquals(t, sampleRate, "3")
+	ts.rsp.reset()
+
+	opts.TailSample = true
+	run(opts)
+	// setting a sample rate of 3 gets 17 requests.
+	// tail does the sampling
+	testEquals(t, ts.rsp.reqCounter, 17)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json40"}`)
+	sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
+	testEquals(t, sampleRate, "3")
 }
 
 func TestReadFromOffset(t *testing.T) {

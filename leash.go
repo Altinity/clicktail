@@ -49,10 +49,18 @@ func run(options GlobalOptions) {
 	}
 
 	// get our lines channel from which to read log lines
-	linesChans, err := tail.GetEntries(tail.Config{
+	var linesChans []chan string
+	var err error
+	tc := tail.Config{
 		Paths:   options.Reqs.LogFiles,
 		Type:    tail.RotateStyleSyslog,
-		Options: options.Tail})
+		Options: options.Tail,
+	}
+	if options.TailSample {
+		linesChans, err = tail.GetSampledEntries(tc, options.SampleRate)
+	} else {
+		linesChans, err = tail.GetEntries(tc)
+	}
 	if err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occurred while trying to tail logfile")
@@ -96,7 +104,8 @@ func run(options GlobalOptions) {
 		}()
 
 		// start up the sender
-		go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending)
+		go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending,
+			options.TailSample)
 
 		// start a goroutine that reads from responses and logs.
 		responses := libhoney.Responses()
@@ -302,7 +311,7 @@ func whitelistKey(whiteKeys []string, key string) bool {
 // sendToLibhoney reads from the toBeSent channel and shoves the events into
 // libhoney events, sending them on their way.
 func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
-	delaySending chan int, doneSending chan bool) {
+	delaySending chan int, doneSending chan bool, presampled bool) {
 	for {
 		// check and see if we need to back off the API because of rate limiting
 		select {
@@ -313,7 +322,9 @@ func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
 		// if we have events to retransmit, send those first
 		select {
 		case ev := <-toBeResent:
-			sendEvent(ev)
+			// retransmitted events have already been sampled; always use
+			// SendPresampled() for these
+			sendEvent(ev, true)
 			continue
 		default:
 		}
@@ -326,7 +337,7 @@ func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
 				doneSending <- true
 				return
 			}
-			sendEvent(ev)
+			sendEvent(ev, presampled)
 			continue
 		default:
 		}
@@ -336,7 +347,7 @@ func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
 }
 
 // sendEvent does the actual handoff to libhoney
-func sendEvent(ev event.Event) {
+func sendEvent(ev event.Event, presampled bool) {
 	libhEv := libhoney.NewEvent()
 	libhEv.Metadata = ev
 	libhEv.Timestamp = ev.Timestamp
@@ -346,7 +357,13 @@ func sendEvent(ev event.Event) {
 			"error": err,
 		}).Error("Unexpected error adding data to libhoney event")
 	}
-	if err := libhEv.Send(); err != nil {
+	var err error
+	if presampled {
+		err = libhEv.SendPresampled()
+	} else {
+		err = libhEv.Send()
+	}
+	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"event": ev,
 			"error": err,

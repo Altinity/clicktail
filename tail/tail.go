@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,6 +56,47 @@ type Config struct {
 type State struct {
 	INode  uint64 // the inode
 	Offset int64
+}
+
+// GetSampledEntries wraps GetEntries and returns a list of channels that
+// provide sampled entries
+func GetSampledEntries(conf Config, sampleRate uint) ([]chan string, error) {
+	unsampledLinesChans, err := GetEntries(conf)
+	if err != nil {
+		return nil, err
+	}
+	if sampleRate == 1 {
+		return unsampledLinesChans, nil
+	}
+
+	sampledLinesChans := make([]chan string, 0, len(unsampledLinesChans))
+
+	for _, lines := range unsampledLinesChans {
+		sampledLines := make(chan string)
+		go func(pLines chan string) {
+			defer close(sampledLines)
+			for line := range pLines {
+				if shouldDrop(sampleRate) {
+					logrus.WithFields(logrus.Fields{
+						"line":       line,
+						"samplerate": sampleRate,
+					}).Debug("Sampler says skip this line")
+				} else {
+					sampledLines <- line
+				}
+			}
+		}(lines)
+		sampledLinesChans = append(sampledLinesChans, sampledLines)
+	}
+	return sampledLinesChans, nil
+}
+
+// shouldDrop returns true if the line should be dropped
+// false if it should be kept
+// if sampleRate is 5,
+// on average one out of every 5 calls should return false
+func shouldDrop(rate uint) bool {
+	return rand.Intn(int(rate)) != 0
 }
 
 // GetEntries sets up a list of channels that get one line at a time from each

@@ -3,6 +3,7 @@ package tail
 import (
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -53,6 +54,50 @@ func TestTailSTDIN(t *testing.T) {
 	}
 	if len(lineChans) != 1 {
 		t.Errorf("lines chans should have had one channel; instead was length %d", len(lineChans))
+	}
+}
+
+func TestGetSampledEntries(t *testing.T) {
+	ts := &testSetup{}
+	ts.start(t)
+	defer ts.stop()
+	rand.Seed(3)
+
+	conf := Config{
+		Paths:   make([]string, 3),
+		Options: tailOpts,
+	}
+
+	jsonLines := make([][]string, 3)
+	filenameRoot := ts.tmpdir + "/json.log"
+	for i := 0; i < 3; i++ {
+		jsonLines[i] = make([]string, 6)
+		for j := 0; j < 6; j++ {
+			jsonLines[i][j] = fmt.Sprintf("{\"a\":%d", i)
+		}
+
+		filename := filenameRoot + fmt.Sprint(i)
+		conf.Paths[i] = filename
+		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
+	}
+
+	chanArr, err := GetSampledEntries(conf, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// can't check each line because the parallel goroutines screw with the random
+	// dropping lines, so you can't know which channel will drop which messages.
+	// But the overall count of messages is predictable.
+	var lineCounter int
+
+	for _, ch := range chanArr {
+		for _ = range ch {
+			lineCounter++
+		}
+	}
+	expectedLines := 10
+	if lineCounter != expectedLines {
+		t.Errorf("expected to get %d lines, got %d instead", expectedLines, lineCounter)
 	}
 }
 
