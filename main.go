@@ -14,6 +14,7 @@ import (
 	"github.com/honeycombio/libhoney-go"
 	flag "github.com/jessevdk/go-flags"
 
+	"github.com/honeycombio/honeytail/parsers/arangodb"
 	"github.com/honeycombio/honeytail/parsers/htjson"
 	"github.com/honeycombio/honeytail/parsers/mongodb"
 	"github.com/honeycombio/honeytail/parsers/mysql"
@@ -32,6 +33,7 @@ var validParsers = []string{
 	"mongo",
 	"json",
 	"mysql",
+	"arangodb",
 }
 
 // GlobalOptions has all the top level CLI flags that honeytail supports
@@ -66,6 +68,7 @@ type GlobalOptions struct {
 	JSON  htjson.Options  `group:"JSON Parser Options" namespace:"json"`
 	MySQL mysql.Options   `group:"MySQL Parser Options" namespace:"mysql"`
 	Mongo mongodb.Options `group:"MongoDB Parser Options" namespace:"mongo"`
+	ArangoDB arangodb.Options `group:"ArangoDB Parser Options" namespace:"arangodb"`
 }
 
 type RequiredOptions struct {

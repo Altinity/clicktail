@@ -14,6 +14,7 @@ import (
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
+	"github.com/honeycombio/honeytail/parsers/arangodb"
 	"github.com/honeycombio/honeytail/parsers/htjson"
 	"github.com/honeycombio/honeytail/parsers/mongodb"
 	"github.com/honeycombio/honeytail/parsers/mysql"
@@ -148,6 +149,9 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 	case "mysql":
 		parser = &mysql.Parser{}
 		opts = &options.MySQL
+	case "arangodb":
+		parser = &arangodb.Parser{}
+		opts = &options.ArangoDB
 	}
 	parser, _ = parser.(parsers.Parser)
 	return parser, opts
