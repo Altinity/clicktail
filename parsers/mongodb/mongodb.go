@@ -11,6 +11,7 @@ import (
 	queryshape "github.com/honeycombio/mongodbtools/queryshape"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/parsers"
 )
 
 const (
@@ -74,8 +75,15 @@ func (p *Parser) Init(options interface{}) error {
 	return nil
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	for line := range lines {
+		// take care of any headers on the line
+		var prefixFields map[string]string
+		if prefixRegex != nil {
+			var prefix string
+			prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
+			line = strings.TrimPrefix(line, prefix)
+		}
 		values, err := p.lineParser.ParseLogLine(line)
 		// we get a bunch of errors from the parser on mongo logs, skip em
 		if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
@@ -111,10 +119,10 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 			}
 
 			if ns, ok := values["namespace"].(string); ok && ns == "admin.$cmd" {
-				if cmd_type, ok := values["command_type"]; ok && cmd_type == "replSetHeartbeat" {
+				if cmdType, ok := values["command_type"]; ok && cmdType == "replSetHeartbeat" {
 					if cmd, ok := values["command"].(map[string]interface{}); ok {
-						if replica_set, ok := cmd["replSetHeartbeat"].(string); ok {
-							p.currentReplicaSet = replica_set
+						if replicaSet, ok := cmd["replSetHeartbeat"].(string); ok {
+							p.currentReplicaSet = replicaSet
 						}
 					}
 				}
@@ -122,6 +130,11 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 
 			if p.currentReplicaSet != "" {
 				values["replica_set"] = p.currentReplicaSet
+			}
+
+			// merge the prefix fields and the parsed line contents
+			for k, v := range prefixFields {
+				values[k] = v
 			}
 
 			logrus.WithFields(logrus.Fields{

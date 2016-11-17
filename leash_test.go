@@ -254,6 +254,23 @@ func TestAddField(t *testing.T) {
 	testEquals(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval","second":"new"}`)
 }
 
+func TestLinePrefix(t *testing.T) {
+	opts := defaultOptions
+	// linePrefix of "Nov 13 10:19:31 app23 process.port[pid]: "
+	// let's capture timestamp and hostname, skip process.port and pid
+	opts.PrefixRegex = `(?P<server_timestamp>... .. ..:..:..) (?P<hostname>[a-zA-Z0-9]+) [^:]*: `
+	ts := &testSetup{}
+	ts.start(t, &opts)
+	defer ts.close()
+	logFileName := ts.tmpdir + "/linePrefix.log"
+	logfh, _ := os.Create(logFileName)
+	defer logfh.Close()
+	fmt.Fprintf(logfh, `Nov 13 10:19:31 app23 process.port[pid]: {"format":"json"}`)
+	opts.Reqs.LogFiles = []string{logFileName}
+	run(opts)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json","hostname":"app23","server_timestamp":"Nov 13 10:19:31"}`)
+}
+
 func TestRequestShapeRaw(t *testing.T) {
 	reqField := "request"
 	opts := defaultOptions

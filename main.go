@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -58,16 +59,17 @@ type GlobalOptions struct {
 	RequestParseQuery string   `long:"request_parse_query" description:"How to parse the request query parameters. 'whitelist' means only extract listed query keys. 'all' means to extract all query parameters as individual columns" default:"whitelist"`
 	RequestQueryKeys  []string `long:"request_query_keys" description:"Request query parameter key names to extract, when request_parse_query is 'whitelist'. May be specified multiple times."`
 	BackOff           bool     `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped. When --backfill is set, it will override this option=true"`
+	PrefixRegex       string   `long:"log_prefix" description:"pass a regex to this flag to strip the matching prefix from the line before handing to the parser. Useful when log aggregation prepends a line header. Use named groups to extract fields into the event."`
 
 	Reqs  RequiredOptions `group:"Required Options"`
 	Modes OtherModes      `group:"Other Modes"`
 
 	Tail tail.TailOptions `group:"Tail Options" namespace:"tail"`
 
-	Nginx nginx.Options   `group:"Nginx Parser Options" namespace:"nginx"`
-	JSON  htjson.Options  `group:"JSON Parser Options" namespace:"json"`
-	MySQL mysql.Options   `group:"MySQL Parser Options" namespace:"mysql"`
-	Mongo mongodb.Options `group:"MongoDB Parser Options" namespace:"mongo"`
+	Nginx    nginx.Options    `group:"Nginx Parser Options" namespace:"nginx"`
+	JSON     htjson.Options   `group:"JSON Parser Options" namespace:"json"`
+	MySQL    mysql.Options    `group:"MySQL Parser Options" namespace:"mysql"`
+	Mongo    mongodb.Options  `group:"MongoDB Parser Options" namespace:"mongo"`
 	ArangoDB arangodb.Options `group:"ArangoDB Parser Options" namespace:"arangodb"`
 }
 
@@ -230,7 +232,22 @@ func sanityCheckOptions(options *GlobalOptions) {
 		os.Exit(1)
 	}
 
-	// Final sanity check: input files
+	// check the prefix regex for validity
+	if options.PrefixRegex != "" {
+		// make sure the regex is anchored against the start of the string
+		if options.PrefixRegex[0] != '^' {
+			options.PrefixRegex = "^" + options.PrefixRegex
+		}
+		// make sure it's valid
+		_, err := regexp.Compile(options.PrefixRegex)
+		if err != nil {
+			fmt.Printf("Prefix regex %s doesn't compile: error %s\n", options.PrefixRegex, err)
+			usage()
+			os.Exit(1)
+		}
+	}
+
+	// Make sure input files exist
 	shouldExit := false
 	for _, f := range options.Reqs.LogFiles {
 		if f == "-" {

@@ -12,6 +12,7 @@ import (
 	flag "github.com/jessevdk/go-flags"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/parsers"
 )
 
 const (
@@ -72,15 +73,28 @@ func (g *GonxLineParser) ParseLine(line string) (map[string]string, error) {
 	return gonxEvent.Fields, nil
 }
 
-func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// parse lines one by one
 	for line := range lines {
 		logrus.WithFields(logrus.Fields{
 			"line": line,
 		}).Debug("Attempting to process nginx log line")
+
+		// take care of any headers on the line
+		var prefixFields map[string]string
+		if prefixRegex != nil {
+			var prefix string
+			prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
+			line = strings.TrimPrefix(line, prefix)
+		}
+
 		parsedLine, err := n.lineParser.ParseLine(line)
 		if err != nil {
 			continue
+		}
+		// merge the prefix fields and the parsed line contents
+		for k, v := range prefixFields {
+			parsedLine[k] = v
 		}
 		// typedEvent, err := typeifyEvent(nginxEvent)
 		typedEvent, err := typeifyParsedLine(parsedLine)

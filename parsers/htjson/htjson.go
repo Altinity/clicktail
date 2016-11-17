@@ -11,6 +11,7 @@ import (
 	"github.com/Sirupsen/logrus"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/parsers"
 )
 
 var possibleTimeFieldNames = []string{
@@ -80,12 +81,22 @@ func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) 
 	return processed, err
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	for line := range lines {
 		logrus.WithFields(logrus.Fields{
 			"line": line,
 		}).Debug("Attempting to process json log line")
+
+		// take care of any headers on the line
+		var prefixFields map[string]string
+		if prefixRegex != nil {
+			var prefix string
+			prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
+			line = strings.TrimPrefix(line, prefix)
+		}
+
 		parsedLine, err := p.lineParser.ParseLine(line)
+
 		if err != nil {
 			// skip lines that won't parse
 			logrus.WithFields(logrus.Fields{
@@ -94,6 +105,11 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 			continue
 		}
 		timestamp := p.getTimestamp(parsedLine)
+
+		// merge the prefix fields and the parsed line contents
+		for k, v := range prefixFields {
+			parsedLine[k] = v
+		}
 
 		// send an event to Transmission
 		e := event.Event{

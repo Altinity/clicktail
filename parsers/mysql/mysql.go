@@ -15,6 +15,7 @@ import (
 	"github.com/honeycombio/mysqltools/query/normalizer"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/parsers"
 )
 
 // See mysql_test for example log entries
@@ -96,28 +97,28 @@ const (
 )
 
 var (
-	reTime             = myRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
-	reAdminPing        = myRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
-	reUser             = myRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+).*$")}
-	reQueryStats       = myRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
-	reServStats        = myRegexp{regexp.MustCompile("^# Bytes_sent: (?P<bytesSent>[0-9.]+) *Tmp_tables: (?P<tmpTables>[0-9.]+) *Tmp_disk_tables: (?P<tmpDiskTables>[0-9]+) *Tmp_table_sizes: (?P<tmpTableSizes>[0-9]+).*$")}
-	reInnodbTrx        = myRegexp{regexp.MustCompile("^# InnoDB_trx_id: (?P<trxId>[A-F0-9]+) *$")}
-	reInnodbQueryPlan1 = myRegexp{regexp.MustCompile("^# QC_Hit: (?P<query_cache_hit>[[:alpha:]]+)  Full_scan: (?P<full_scan>[[:alpha:]]+)  Full_join: (?P<full_join>[[:alpha:]]+)  Tmp_table: (?P<tmp_table>[[:alpha:]]+)  Tmp_table_on_disk: (?P<tmp_table_on_disk>[[:alpha:]]+).*$")}
-	reInnodbQueryPlan2 = myRegexp{regexp.MustCompile("^# Filesort: (?P<filesort>[[:alpha:]]+)  Filesort_on_disk: (?P<filesort_on_disk>[[:alpha:]]+)  Merge_passes: (?P<merge_passes>[0-9]+).*$")}
-	reInnodbUsage1     = myRegexp{regexp.MustCompile("^# +InnoDB_IO_r_ops: (?P<io_r_ops>[0-9]+)  InnoDB_IO_r_bytes: (?P<io_r_bytes>[0-9]+)  InnoDB_IO_r_wait: (?P<io_r_wait>[0-9.]+).*$")}
-	reInnodbUsage2     = myRegexp{regexp.MustCompile("^# +InnoDB_rec_lock_wait: (?P<rec_lock_wait>[0-9.]+)  InnoDB_queue_wait: (?P<queue_wait>[0-9.]+).*$")}
-	reInnodbUsage3     = myRegexp{regexp.MustCompile("^# +InnoDB_pages_distinct: (?P<pages_distinct>[0-9]+).*")}
-	reSetTime          = myRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
-	reQuery            = myRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
-	reUse              = myRegexp{regexp.MustCompile("^(?i)use ")}
+	reTime             = parsers.ExtRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
+	reAdminPing        = parsers.ExtRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
+	reUser             = parsers.ExtRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+).*$")}
+	reQueryStats       = parsers.ExtRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
+	reServStats        = parsers.ExtRegexp{regexp.MustCompile("^# Bytes_sent: (?P<bytesSent>[0-9.]+) *Tmp_tables: (?P<tmpTables>[0-9.]+) *Tmp_disk_tables: (?P<tmpDiskTables>[0-9]+) *Tmp_table_sizes: (?P<tmpTableSizes>[0-9]+).*$")}
+	reInnodbTrx        = parsers.ExtRegexp{regexp.MustCompile("^# InnoDB_trx_id: (?P<trxId>[A-F0-9]+) *$")}
+	reInnodbQueryPlan1 = parsers.ExtRegexp{regexp.MustCompile("^# QC_Hit: (?P<query_cache_hit>[[:alpha:]]+)  Full_scan: (?P<full_scan>[[:alpha:]]+)  Full_join: (?P<full_join>[[:alpha:]]+)  Tmp_table: (?P<tmp_table>[[:alpha:]]+)  Tmp_table_on_disk: (?P<tmp_table_on_disk>[[:alpha:]]+).*$")}
+	reInnodbQueryPlan2 = parsers.ExtRegexp{regexp.MustCompile("^# Filesort: (?P<filesort>[[:alpha:]]+)  Filesort_on_disk: (?P<filesort_on_disk>[[:alpha:]]+)  Merge_passes: (?P<merge_passes>[0-9]+).*$")}
+	reInnodbUsage1     = parsers.ExtRegexp{regexp.MustCompile("^# +InnoDB_IO_r_ops: (?P<io_r_ops>[0-9]+)  InnoDB_IO_r_bytes: (?P<io_r_bytes>[0-9]+)  InnoDB_IO_r_wait: (?P<io_r_wait>[0-9.]+).*$")}
+	reInnodbUsage2     = parsers.ExtRegexp{regexp.MustCompile("^# +InnoDB_rec_lock_wait: (?P<rec_lock_wait>[0-9.]+)  InnoDB_queue_wait: (?P<queue_wait>[0-9.]+).*$")}
+	reInnodbUsage3     = parsers.ExtRegexp{regexp.MustCompile("^# +InnoDB_pages_distinct: (?P<pages_distinct>[0-9]+).*")}
+	reSetTime          = parsers.ExtRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
+	reQuery            = parsers.ExtRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
+	reUse              = parsers.ExtRegexp{regexp.MustCompile("^(?i)use ")}
 
 	// if 'flush logs' is run at the mysql prompt (which rds commonly does, apparently) the following shows up in slow query log:
 	//   /usr/local/Cellar/mysql/5.7.12/bin/mysqld, Version: 5.7.12 (Homebrew). started with:
 	//   Tcp port: 3306  Unix socket: /tmp/mysql.sock
 	//   Time                 Id Command    Argument
-	reMySQLVersion       = myRegexp{regexp.MustCompile("/.*, Version: .* .*MySQL Community Server.*")}
-	reMySQLPortSock      = myRegexp{regexp.MustCompile("Tcp port:.* Unix socket:.*")}
-	reMySQLColumnHeaders = myRegexp{regexp.MustCompile("Time.*Id.*Command.*Argument.*")}
+	reMySQLVersion       = parsers.ExtRegexp{regexp.MustCompile("/.*, Version: .* .*MySQL Community Server.*")}
+	reMySQLPortSock      = parsers.ExtRegexp{regexp.MustCompile("Tcp port:.* Unix socket:.*")}
+	reMySQLColumnHeaders = parsers.ExtRegexp{regexp.MustCompile("Time.*Id.*Command.*Argument.*")}
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
@@ -301,7 +302,7 @@ func isMySQLHeaderLine(line string) bool {
 		(first == 'T' && reMySQLColumnHeaders.MatchString(line))
 }
 
-func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
+func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan []string)
 	var wg sync.WaitGroup
@@ -314,6 +315,14 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event) {
 	var foundStatement bool
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
+		// mysql parser does not support capturing fields in the line prefix - just
+		// strip it.
+		if prefixRegex != nil {
+			var prefix string
+			prefix = prefixRegex.FindString(line)
+			line = strings.TrimPrefix(line, prefix)
+		}
+
 		lineIsComment := strings.HasPrefix(line, "# ")
 		if !lineIsComment && !isMySQLHeaderLine(line) {
 			// we've finished the comments before the statement and now should slurp
@@ -378,7 +387,7 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 	query := ""
 	for _, line := range rawE {
 		// parse each line and populate the map of attributes
-		if mg := reTime.FindStringSubmatchMap(line); mg != nil {
+		if _, mg := reTime.FindStringSubmatchMap(line); mg != nil {
 			timeFromComment, _ = time.Parse(timeFormat, mg["time"])
 		} else if reAdminPing.MatchString(line) {
 			// this event is an administrative ping and we should
@@ -388,7 +397,7 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 				"event": rawE,
 			}).Debug("readmin ping detected; skipping this event")
 			return nil, time.Time{}
-		} else if mg := reUser.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reUser.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			sq[userKey] = strings.Split(mg["user"], "[")[0]
 			hostAndIP := strings.Split(mg["host"], " ")
@@ -400,7 +409,7 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 				sq[clientKey] = hostAndIP[0]
 				sq[clientIPKey] = hostAndIP[1][1 : len(hostAndIP[1])-1]
 			}
-		} else if mg := reQueryStats.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reQueryStats.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			if queryTime, err := strconv.ParseFloat(mg["queryTime"], 64); err == nil {
 				sq[queryTimeKey] = queryTime
@@ -417,7 +426,7 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			if rowsAffected, err := strconv.Atoi(mg["rowsAffected"]); err == nil {
 				sq[rowsAffectedKey] = rowsAffected
 			}
-		} else if mg := reServStats.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reServStats.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			if bytesSent, err := strconv.Atoi(mg["bytesSent"]); err == nil {
 				sq[bytesSentKey] = bytesSent
@@ -431,19 +440,19 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			if tmpTableSizes, err := strconv.Atoi(mg["tmpTableSizes"]); err == nil {
 				sq[tmpTableSizesKey] = tmpTableSizes
 			}
-		} else if mg := reInnodbQueryPlan1.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reInnodbQueryPlan1.FindStringSubmatchMap(line); mg != nil {
 			sq[queryCacheHitKey] = mg["query_cache_hit"] == "Yes"
 			sq[fullScanKey] = mg["full_scan"] == "Yes"
 			sq[fullJoinKey] = mg["full_join"] == "Yes"
 			sq[tmpTableKey] = mg["tmp_table"] == "Yes"
 			sq[tmpTableOnDiskKey] = mg["tmp_table_on_disk"] == "Yes"
-		} else if mg := reInnodbQueryPlan2.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reInnodbQueryPlan2.FindStringSubmatchMap(line); mg != nil {
 			sq[fileSortKey] = mg["filesort"] == "Yes"
 			sq[fileSortOnDiskKey] = mg["filesort_on_disk"] == "Yes"
 			if mergePasses, err := strconv.Atoi(mg["merge_passes"]); err == nil {
 				sq[mergePassesKey] = mergePasses
 			}
-		} else if mg := reInnodbUsage1.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reInnodbUsage1.FindStringSubmatchMap(line); mg != nil {
 			if ioROps, err := strconv.Atoi(mg["io_r_ops"]); err == nil {
 				sq[ioROpsKey] = ioROps
 			}
@@ -453,18 +462,18 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			if ioRWait, err := strconv.ParseFloat(mg["io_r_wait"], 64); err == nil {
 				sq[ioRWaitKey] = ioRWait
 			}
-		} else if mg := reInnodbUsage2.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reInnodbUsage2.FindStringSubmatchMap(line); mg != nil {
 			if recLockWait, err := strconv.ParseFloat(mg["rec_lock_wait"], 64); err == nil {
 				sq[recLockWaitKey] = recLockWait
 			}
 			if queueWait, err := strconv.ParseFloat(mg["queue_wait"], 64); err == nil {
 				sq[queueWaitKey] = queueWait
 			}
-		} else if mg := reInnodbUsage3.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reInnodbUsage3.FindStringSubmatchMap(line); mg != nil {
 			if pagesDistinct, err := strconv.Atoi(mg["pages_distinct"]); err == nil {
 				sq[pagesDistinctKey] = pagesDistinct
 			}
-		} else if mg := reInnodbTrx.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reInnodbTrx.FindStringSubmatchMap(line); mg != nil {
 			sq[transactionIDKey] = mg["trxId"]
 		} else if match := reUse.FindString(line); match != "" {
 			query = ""
@@ -475,12 +484,12 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 			// Use this line as the query/normalized_query unless, if a real query follows it will be replaced.
 			sq[queryKey] = strings.TrimRight(line, ";")
 			sq[normalizedQueryKey] = sq[queryKey]
-		} else if mg := reSetTime.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reSetTime.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			timeFromSet, _ = strconv.ParseInt(mg["unixTime"], 10, 64)
 		} else if isMySQLHeaderLine(line) {
 			// ignore and skip the header lines
-		} else if mg := reQuery.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reQuery.FindStringSubmatchMap(line); mg != nil {
 			query = query + " " + mg["query"]
 			if strings.HasSuffix(query, ";") {
 				q := strings.TrimSpace(strings.TrimSuffix(query, ";"))

@@ -81,7 +81,7 @@ func TestProcessLines(t *testing.T) {
 		close(lines)
 	}()
 	// spin up the processor to process our test lines
-	go m.ProcessLines(lines, send)
+	go m.ProcessLines(lines, send, nil)
 	for _, pair := range tlm {
 		ev := <-send
 

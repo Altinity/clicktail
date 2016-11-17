@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -47,6 +48,14 @@ func run(options GlobalOptions) {
 	if err := libhoney.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occured while spinning up Transimission")
+	}
+
+	// compile the prefix regex once for use on all channels
+	var prefixRegex *parsers.ExtRegexp
+	if options.PrefixRegex == "" {
+		prefixRegex = nil
+	} else {
+		prefixRegex = &parsers.ExtRegexp{regexp.MustCompile(options.PrefixRegex)}
 	}
 
 	// get our lines channel from which to read log lines
@@ -115,7 +124,7 @@ func run(options GlobalOptions) {
 		parsersWG.Add(1)
 		go func(plines chan string) {
 			// ProcessLines won't return until lines is closed
-			parser.ProcessLines(plines, toBeSent)
+			parser.ProcessLines(plines, toBeSent, prefixRegex)
 			// trigger the sending goroutine to finish up
 			close(toBeSent)
 			// wait for all the events in toBeSent to be handed to libhoney

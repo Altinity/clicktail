@@ -722,7 +722,7 @@ func TestProcessLines(t *testing.T) {
 		lines := make(chan string, 10)
 		send := make(chan event.Event, 5)
 		go func() {
-			p.ProcessLines(lines, send)
+			p.ProcessLines(lines, send, nil)
 			close(send)
 		}()
 		for _, line := range tt.in {
