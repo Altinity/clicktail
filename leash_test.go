@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -79,13 +83,13 @@ func TestBasicSend(t *testing.T) {
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(opts)
 	testEquals(t, ts.rsp.reqCounter, 1)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json"}`)
+	testEquals(t, ts.rsp.evtCounter, 1)
+	testContains(t, ts.rsp.reqBody, `{"pika":`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json"}`)
 	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
 	testEquals(t, teamID, "abcabc123123")
 	requestURL := ts.rsp.req.URL.Path
-	testEquals(t, requestURL, "/1/events/pika")
-	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
-	testEquals(t, sampleRate, "1")
+	testEquals(t, requestURL, "/1/batch")
 }
 
 func TestMultipleFiles(t *testing.T) {
@@ -109,13 +113,15 @@ func TestMultipleFiles(t *testing.T) {
 	fmt.Fprintf(fh2, `{"key2":"val2"}`)
 	opts.Reqs.LogFiles = []string{logFile1, logFile2}
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 2)
+	testEquals(t, ts.rsp.reqCounter, 1)
+	testEquals(t, ts.rsp.evtCounter, 2)
+	testContains(t, ts.rsp.reqBody, `{"pika"`)
+	testContains(t, ts.rsp.reqBody, `{"key1":"val1"}`)
+	testContains(t, ts.rsp.reqBody, `{"key2":"val2"}`)
 	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
 	testEquals(t, teamID, "abcabc123123")
 	requestURL := ts.rsp.req.URL.Path
-	testEquals(t, requestURL, "/1/events/pika")
-	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
-	testEquals(t, sampleRate, "1")
+	testEquals(t, requestURL, "/1/batch")
 }
 
 func TestMultiLineMultiFile(t *testing.T) {
@@ -165,8 +171,15 @@ SELECT
                 FROM datasets WHERE team_id=17 AND slug='api-prod';`)
 	opts.Reqs.LogFiles = []string{logFile1, logFile2}
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 4)
-	// TODO: should actually assert on the contents of the events being logged
+	testEquals(t, ts.rsp.reqCounter, 1)
+	testEquals(t, ts.rsp.evtCounter, 4)
+	testContains(t, ts.rsp.reqBody, `"query":"SELECT * FROM orders`)
+	testContains(t, ts.rsp.reqBody, `"tables":"orders"`)
+	testContains(t, ts.rsp.reqBody, `"query":"show status like 'Uptime'`)
+	testContains(t, ts.rsp.reqBody, `"query":"SELECT certs.* FROM`)
+	testContains(t, ts.rsp.reqBody, `"tables":"certs"`)
+	testContains(t, ts.rsp.reqBody, `"query":"SELECT id, team_id, name`)
+	testContains(t, ts.rsp.reqBody, `"tables":"datasets"`)
 }
 
 func TestSetVersion(t *testing.T) {
@@ -181,20 +194,22 @@ func TestSetVersion(t *testing.T) {
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(opts)
 	userAgent := ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.2")
+	testContains(t, userAgent, "libhoney-go")
 	setVersionUserAgent(false, "fancyParser")
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/dev (fancyParser)")
+	testContains(t, userAgent, "libhoney-go")
+	testContains(t, userAgent, "fancyParser")
 	BuildID = "test"
 	setVersionUserAgent(false, "fancyParser")
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/test (fancyParser)")
+	testContains(t, userAgent, " honeytail/test")
 	setVersionUserAgent(true, "fancyParser")
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/test (fancyParser backfill)")
+	testContains(t, userAgent, " honeytail/test")
+	testContains(t, userAgent, "fancyParser backfill")
 }
 
 func TestDropField(t *testing.T) {
@@ -209,15 +224,15 @@ func TestDropField(t *testing.T) {
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(opts)
 	testEquals(t, ts.rsp.reqCounter, 1)
-	testEquals(t, ts.rsp.reqBody, `{"dropme":"chew","format":"json","reallygone":"notyet"}`)
+	testContains(t, ts.rsp.reqBody, `{"dropme":"chew","format":"json","reallygone":"notyet"}`)
 	opts.DropFields = []string{"dropme"}
 	run(opts)
 	testEquals(t, ts.rsp.reqCounter, 2)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json","reallygone":"notyet"}`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json","reallygone":"notyet"}`)
 	opts.DropFields = []string{"dropme", "reallygone"}
 	run(opts)
 	testEquals(t, ts.rsp.reqCounter, 3)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json"}`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json"}`)
 }
 
 func TestScrubField(t *testing.T) {
@@ -233,7 +248,7 @@ func TestScrubField(t *testing.T) {
 	opts.ScrubFields = []string{"name"}
 	run(opts)
 	testEquals(t, ts.rsp.reqCounter, 1)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json","name":"e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c"}`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json","name":"e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c"}`)
 }
 
 func TestAddField(t *testing.T) {
@@ -248,10 +263,10 @@ func TestAddField(t *testing.T) {
 	opts.Reqs.LogFiles = []string{logFileName}
 	opts.AddFields = []string{`newfield=newval`}
 	run(opts)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval"}`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval"}`)
 	opts.AddFields = []string{"newfield=newval", "second=new"}
 	run(opts)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval","second":"new"}`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval","second":"new"}`)
 }
 
 func TestLinePrefix(t *testing.T) {
@@ -401,10 +416,19 @@ func TestSampleRate(t *testing.T) {
 	opts.TailSample = false
 	run(opts)
 	// with no sampling, 50 lines -> 50 requests
-	testEquals(t, ts.rsp.reqCounter, 50)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json49"}`)
-	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
-	testEquals(t, sampleRate, "1")
+	testEquals(t, ts.rsp.evtCounter, 50)
+	testContains(t, ts.rsp.reqBody, `{"format":"json46"}`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json47"}`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json48"}`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json49"}`)
+	ts.rsp.reset()
+
+	opts.SampleRate = 3
+	run(opts)
+	// setting a sample rate of 3 and a rand seed of 1, 16 requests.
+	// libhoney does the sampling
+	testEquals(t, ts.rsp.evtCounter, 16)
+	testContains(t, ts.rsp.reqBody, `{"format":"json47"},"samplerate":3,`)
 	ts.rsp.reset()
 
 	opts.SampleRate = 3
@@ -412,10 +436,15 @@ func TestSampleRate(t *testing.T) {
 	run(opts)
 	// setting a sample rate of 3 gets 17 requests.
 	// tail does the sampling
-	testEquals(t, ts.rsp.reqCounter, 17)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json49"}`)
-	sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
-	testEquals(t, sampleRate, "3")
+	//<<<<<<< HEAD
+	//testEquals(t, ts.rsp.reqCounter, 17)
+	//testEquals(t, ts.rsp.reqBody, `{"format":"json49"}`)
+	//sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
+	//testEquals(t, sampleRate, "3")
+	//=======
+	testEquals(t, ts.rsp.evtCounter, 17)
+	testContains(t, ts.rsp.reqBody, `{"format":"json40"},"samplerate":3,`)
+	//>>>>>>> Fix leash_test to prepare for gzipped/batched events by default
 }
 
 func TestReadFromOffset(t *testing.T) {
@@ -439,7 +468,8 @@ func TestReadFromOffset(t *testing.T) {
 	defer osf.Close()
 	fmt.Fprintf(osf, `{"INode":%d,"Offset":38}`, logStat.Ino)
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 8)
+	testEquals(t, ts.rsp.reqCounter, 1)
+	testEquals(t, ts.rsp.evtCounter, 8)
 }
 
 // boilerplate to spin up a httptest server, create tmpdir, etc.
@@ -471,6 +501,7 @@ type responder struct {
 	req          *http.Request // the most recent request answered by the server
 	reqBody      string        // the body sent along with the request
 	reqCounter   int           // the number of requests answered since last reset
+	evtCounter   int           // the number of events (<= reqCounter, will be < if events are batched)
 	responseCode int           // the http status code with which to respond
 	responseBody string        // the body to send as the response
 }
@@ -478,14 +509,47 @@ type responder struct {
 func (r *responder) serveResponse(w http.ResponseWriter, req *http.Request) {
 	r.req = req
 	r.reqCounter += 1
-	body, _ := ioutil.ReadAll(req.Body)
-	req.Body.Close()
+
+	var reader io.ReadCloser
+	switch req.Header.Get("Content-Encoding") {
+	case "gzip":
+		buf := bytes.Buffer{}
+		if _, err := io.Copy(&buf, req.Body); err != nil {
+			panic(err)
+		}
+		gzReader, err := gzip.NewReader(&buf)
+		if err != nil {
+			panic(err)
+		}
+		req.Body.Close()
+		reader = gzReader
+	default:
+		reader = req.Body
+	}
+	defer reader.Close()
+
+	body, err := ioutil.ReadAll(reader)
+	if err != nil {
+		panic(err)
+	}
+
+	payload := make(map[string][]interface{})
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, &payload); err != nil {
+			r.evtCounter++ // likely not a batch request
+		} else {
+			for _, events := range payload {
+				r.evtCounter += len(events)
+			}
+		}
+	}
 	r.reqBody = string(body)
 	w.WriteHeader(r.responseCode)
 	fmt.Fprintf(w, r.responseBody)
 }
 func (r *responder) reset() {
 	r.reqCounter = 0
+	r.evtCounter = 0
 	r.responseCode = 200
 }
 
@@ -504,6 +568,21 @@ func testEquals(t testing.TB, actual, expected interface{}, msg ...string) {
 			testDeref(actual),
 			testDeref(expected),
 			testDeref(expected),
+		)
+	}
+}
+func testContains(t testing.TB, actual, expected string, msg ...string) {
+	if !strings.Contains(actual, expected) {
+		message := strings.Join(msg, ", ")
+		_, file, line, _ := runtime.Caller(1)
+
+		t.Errorf(
+			"%s:%d: %s -- actual: %s, expected substring: %s",
+			filepath.Base(file),
+			line,
+			message,
+			actual,
+			expected,
 		)
 	}
 }
