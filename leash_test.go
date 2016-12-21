@@ -282,9 +282,11 @@ func TestRequestShapeRaw(t *testing.T) {
 			"request_protocol_version": "HTTP/1.1",
 			"request_uri":              "/about/en/books",
 			"request_path":             "/about/en/books",
-			"request_query":            "",
+			"request_query":            nil, // field missing instead of empty
 			"request_path_lang":        "en",
 			"request_shape":            "/about/:lang/books",
+			"request_pathshape":        "/about/:lang/books",
+			"request_queryshape":       nil, // field missing instead of empty
 		},
 		"GET /about?foo=bar HTTP/1.0": {
 			"request_method":           "GET",
@@ -294,21 +296,27 @@ func TestRequestShapeRaw(t *testing.T) {
 			"request_query":            "foo=bar",
 			"request_query_foo":        "bar",
 			"request_shape":            "/about?foo=?",
+			"request_pathshape":        "/about",
+			"request_queryshape":       "foo=?",
 		},
 		"/about/en/books": {
-			"request_uri":       "/about/en/books",
-			"request_path":      "/about/en/books",
-			"request_query":     "",
-			"request_path_lang": "en",
-			"request_shape":     "/about/:lang/books",
+			"request_uri":        "/about/en/books",
+			"request_path":       "/about/en/books",
+			"request_query":      nil, // field missing instead of empty
+			"request_path_lang":  "en",
+			"request_shape":      "/about/:lang/books",
+			"request_pathshape":  "/about/:lang/books",
+			"request_queryshape": nil, // field missing instead of empty
 		},
 		"/about/en?foo=bar&bar=bar2": {
-			"request_uri":       "/about/en?foo=bar&bar=bar2",
-			"request_path":      "/about/en",
-			"request_query":     "foo=bar&bar=bar2",
-			"request_query_foo": "bar",
-			"request_path_lang": "en",
-			"request_shape":     "/about/:lang?bar=?&foo=?",
+			"request_uri":        "/about/en?foo=bar&bar=bar2",
+			"request_path":       "/about/en",
+			"request_query":      "foo=bar&bar=bar2",
+			"request_query_foo":  "bar",
+			"request_path_lang":  "en",
+			"request_shape":      "/about/:lang?bar=?&foo=?",
+			"request_pathshape":  "/about/:lang",
+			"request_queryshape": "bar=?&foo=?",
 		},
 		"/about/en?foo=bar&baz&foo=bend&foo=alpha&bend=beta": {
 			"request_uri":        "/about/en?foo=bar&baz&foo=bend&foo=alpha&bend=beta",
@@ -318,17 +326,21 @@ func TestRequestShapeRaw(t *testing.T) {
 			"request_query_bend": "beta",
 			"request_path_lang":  "en",
 			"request_shape":      "/about/:lang?baz=?&bend=?&foo=?&foo=?&foo=?",
+			"request_pathshape":  "/about/:lang",
+			"request_queryshape": "baz=?&bend=?&foo=?&foo=?&foo=?",
 		},
 	}
 	urlsAllQuery := map[string]map[string]interface{}{
 		"/about/en?foo=bar&bar=bar2": {
-			"request_uri":       "/about/en?foo=bar&bar=bar2",
-			"request_path":      "/about/en",
-			"request_query":     "foo=bar&bar=bar2",
-			"request_query_foo": "bar",
-			"request_query_bar": "bar2",
-			"request_path_lang": "en",
-			"request_shape":     "/about/:lang?bar=?&foo=?",
+			"request_uri":        "/about/en?foo=bar&bar=bar2",
+			"request_path":       "/about/en",
+			"request_query":      "foo=bar&bar=bar2",
+			"request_query_foo":  "bar",
+			"request_query_bar":  "bar2",
+			"request_path_lang":  "en",
+			"request_shape":      "/about/:lang?bar=?&foo=?",
+			"request_pathshape":  "/about/:lang",
+			"request_queryshape": "bar=?&foo=?",
 		},
 	}
 	// test whitelisting keys foo, baz, and bend but not bar
