@@ -182,19 +182,19 @@ func TestSetVersion(t *testing.T) {
 	run(opts)
 	userAgent := ts.rsp.req.Header.Get("User-Agent")
 	testEquals(t, userAgent, "libhoney-go/1.1.2")
-	setVersion(false)
+	setVersionUserAgent(false, "fancyParser")
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/dev")
+	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/dev (fancyParser)")
 	BuildID = "test"
-	setVersion(false)
+	setVersionUserAgent(false, "fancyParser")
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/test")
-	setVersion(true)
+	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/test (fancyParser)")
+	setVersionUserAgent(true, "fancyParser")
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/test backfill")
+	testEquals(t, userAgent, "libhoney-go/1.1.2 honeytail/test (fancyParser backfill)")
 }
 
 func TestDropField(t *testing.T) {

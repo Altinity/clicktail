@@ -130,7 +130,7 @@ func main() {
 		options.Tail.Stop = true
 	}
 
-	setVersion(options.Backfill)
+	setVersionUserAgent(options.Backfill, options.Reqs.ParserName)
 	handleOtherModes(flagParser, options.Modes)
 	addParserDefaultOptions(&options)
 	sanityCheckOptions(&options)
@@ -140,16 +140,16 @@ func main() {
 }
 
 // setVersion sets the internal version ID and updates libhoney's user-agent
-func setVersion(backfill bool) {
+func setVersionUserAgent(backfill bool, parserName string) {
 	if BuildID == "" {
 		version = "dev"
 	} else {
 		version = BuildID
 	}
 	if backfill {
-		version += " backfill"
+		parserName += " backfill"
 	}
-	libhoney.UserAgentAddition = fmt.Sprintf("honeytail/%s", version)
+	libhoney.UserAgentAddition = fmt.Sprintf("honeytail/%s (%s)", version, parserName)
 }
 
 // handleOtherModes takse care of all flags that say we should just do something
