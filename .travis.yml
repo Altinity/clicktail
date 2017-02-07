@@ -16,6 +16,13 @@ go:
 
 script: go test github.com/honeycombio/honeytail/...
 
+before_install:
+    - sudo apt-get -qq update
+    - sudo apt-get install -y ruby-dev build-essential
+    - sudo gem install fpm
+
 after_success:
     - rm $GOPATH/bin/honeytail
     - go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/honeycombio/honeytail/...
+    - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t deb
+    - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t rpm
