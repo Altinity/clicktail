@@ -17,9 +17,10 @@ go:
 script: go test github.com/honeycombio/honeytail/...
 
 before_install:
+    # Install fpm for deb/rpm package building
     - sudo apt-get -qq update
-    - sudo apt-get install -y ruby-dev build-essential
-    - sudo gem install fpm
+    - sudo apt-get install -y build-essential rpm
+    - gem install fpm
 
 after_success:
     - rm $GOPATH/bin/honeytail
