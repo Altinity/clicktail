@@ -25,5 +25,6 @@ before_install:
 after_success:
     - rm $GOPATH/bin/honeytail
     - go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/honeycombio/honeytail/...
+    - $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
     - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t deb
     - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t rpm

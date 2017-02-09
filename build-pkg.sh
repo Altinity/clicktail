@@ -23,9 +23,11 @@ if [ -z "$version" ] || [ -z "$pkg_type" ]; then
     usage
 fi
 
-fpm -s dir -n honeytail -C $GOPATH/bin \
+fpm -s dir -n honeytail \
     -m "Honeycomb <team@honeycomb.io>" \
     -p $GOPATH/bin \
     -v $version \
     -t $pkg_type \
-    ./honeytail=/usr/bin/honeytail
+    $GOPATH/bin/honeytail=/usr/bin/honeytail \
+    ./honeytail.upstart=/etc/init/honeytail.conf \
+    ./honeytail.conf=/etc/honeytail/honeytail.conf
