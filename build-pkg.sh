@@ -30,4 +30,5 @@ fpm -s dir -n honeytail \
     -t $pkg_type \
     $GOPATH/bin/honeytail=/usr/bin/honeytail \
     ./honeytail.upstart=/etc/init/honeytail.conf \
+    ./honeytail.systmed=/lib/systemd/system/honeytail.service \
     ./honeytail.conf=/etc/honeytail/honeytail.conf

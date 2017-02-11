@@ -1,8 +1,6 @@
 package htjson
 
-import (
-	"strings"
-)
+import "strings"
 
 const (
 	StrftimeChar     = "%"
@@ -52,6 +50,7 @@ var (
 		"%y": "06",
 		"%Y": "2006",
 		"%z": "-0700",
+		"%Z": "MST",
 		"%+": "Mon Jan _2 15:04:05 MST 2006",
 	}
 )
@@ -62,6 +61,5 @@ func convertTimeFormat(layout string) string {
 	for fmt, conv := range convertMapping {
 		layout = strings.Replace(layout, fmt, conv, -1)
 	}
-
 	return layout
 }
