@@ -34,7 +34,7 @@ type TailOptions struct {
 	ReadFrom  string `long:"read_from" description:"Location in the file from which to start reading. Values: beginning, end, last. Last picks up where it left off, if the file has not been rotated, otherwise beginning. When --backfill is set, it will override this option=beginning" default:"last"`
 	Stop      bool   `long:"stop" description:"Stop reading the file after reaching the end rather than continuing to tail. When --backfill is set, it will override this option=true"`
 	Poll      bool   `long:"poll" description:"use poll instead of inotify to tail files"`
-	StateFile string `long:"statefile" description:"File in which to store the last read position. Defaults to a file with the same path as the log file and the suffix .leash.state. If tailing multiple files, default is forced."`
+	StateFile string `long:"statefile" description:"File in which to store the last read position. Defaults to a file in /tmp named $logfile.leash.state. If tailing multiple files, default is forced."`
 }
 
 // Statefile mechanics when ReadFrom is 'last'
@@ -182,7 +182,7 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan strin
 		}).Warn("Failed to open statefile for writing. File location will not be saved.")
 	}
 
-	ticker := time.NewTimer(time.Second)
+	ticker := time.NewTicker(time.Second)
 	state := State{}
 	go func() {
 		for range ticker.C {
