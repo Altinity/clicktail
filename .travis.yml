@@ -22,6 +22,9 @@ before_install:
     - sudo apt-get install -y build-essential rpm
     - gem install fpm
 
+install:
+        - true # HACK: fixes travis-CI lack of support for vendor/ + godeps
+
 after_success:
     - rm $GOPATH/bin/honeytail
     - go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/honeycombio/honeytail/...

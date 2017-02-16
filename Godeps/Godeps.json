@@ -1,0 +1,130 @@
+{
+	"ImportPath": "github.com/honeycombio/honeytail",
+	"GoVersion": "go1.6",
+	"GodepVersion": "v74",
+	"Deps": [
+		{
+			"ImportPath": "github.com/Sirupsen/logrus",
+			"Comment": "v0.10.0",
+			"Rev": "4b6ea7319e214d98c938f12692336f7ca9348d6b"
+		},
+		{
+			"ImportPath": "github.com/facebookgo/clock",
+			"Rev": "600d898af40aa09a7a93ecb9265d87b0504b6f03"
+		},
+		{
+			"ImportPath": "github.com/facebookgo/limitgroup",
+			"Rev": "6abd8d71ec01451d7f1929eacaa263bbe2935d05"
+		},
+		{
+			"ImportPath": "github.com/facebookgo/muster",
+			"Rev": "fd3d7953fd52354a74b9f6b3d70d0c9650c4ec2a"
+		},
+		{
+			"ImportPath": "github.com/go-sql-driver/mysql",
+			"Comment": "v1.2-191-g1421caf",
+			"Rev": "1421caf44f6464fd2ee8de694c7508ee13f92964"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/gonx",
+			"Comment": "v1.3.0-5-g45c9e83",
+			"Rev": "45c9e836929976702894f73f10fb9ec43e0279d2"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/libhoney-go",
+			"Rev": "4306e464c779afe1213a31167ca736bda93eafce"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/mongodbtools/logparser",
+			"Rev": "8874fcd7ede8ce3fd736c71c038f2ca20e07263a"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/mongodbtools/logparser/internal/logparser",
+			"Rev": "8874fcd7ede8ce3fd736c71c038f2ca20e07263a"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/mongodbtools/queryshape",
+			"Rev": "8874fcd7ede8ce3fd736c71c038f2ca20e07263a"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/mongodbtools/queryshape/internal/queryshape",
+			"Rev": "8874fcd7ede8ce3fd736c71c038f2ca20e07263a"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/mysqltools/query/normalizer",
+			"Rev": "8faf3147a35bfe18a56b0894412c0b19460b7fae"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/sqlparser",
+			"Rev": "fd1fdbfd738b8aa0cbc331afe62d350f3a7bb579"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/urlshaper",
+			"Rev": "2da4f9f260e5522fea23c0d2554cc0d76610698b"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail/ratelimiter",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail/util",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail/watch",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail/winfile",
+			"Comment": "v1.0.0",
+			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+		},
+		{
+			"ImportPath": "github.com/jessevdk/go-flags",
+			"Comment": "v1-372-g4cc2832",
+			"Rev": "4cc2832a6e6d1d3b815e2b9d544b2a4dfb3ce8fa"
+		},
+		{
+			"ImportPath": "github.com/xwb1989/sqlparser/dependency/bson",
+			"Rev": "dbfc8580724c42e86a20e9586b75a65b806cd88b"
+		},
+		{
+			"ImportPath": "github.com/xwb1989/sqlparser/dependency/bytes2",
+			"Rev": "dbfc8580724c42e86a20e9586b75a65b806cd88b"
+		},
+		{
+			"ImportPath": "github.com/xwb1989/sqlparser/dependency/hack",
+			"Rev": "dbfc8580724c42e86a20e9586b75a65b806cd88b"
+		},
+		{
+			"ImportPath": "github.com/xwb1989/sqlparser/dependency/sqltypes",
+			"Rev": "dbfc8580724c42e86a20e9586b75a65b806cd88b"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "320cb01ddbbf0473674c2585f9b6e245721de355"
+		},
+		{
+			"ImportPath": "gopkg.in/alexcesaro/statsd.v2",
+			"Comment": "v2.0.0",
+			"Rev": "7fea3f0d2fab1ad973e641e51dba45443a311a90"
+		},
+		{
+			"ImportPath": "gopkg.in/fsnotify.v1",
+			"Comment": "v1.2.10",
+			"Rev": "875cf421b32f8f1b31bd43776297876d01542279"
+		},
+		{
+			"ImportPath": "gopkg.in/tomb.v1",
+			"Rev": "dd632973f1e7218eb1089048e0798ec9ae7dceb8"
+		}
+	]
+}
