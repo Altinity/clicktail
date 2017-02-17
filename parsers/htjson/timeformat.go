@@ -29,6 +29,7 @@ var (
 		"%j": "",   // day of year not supported
 		"%k": "15", // same case as %H but accepts leading space instead of 0
 		"%l": "_3",
+		"%L": "999", // milliseconds
 		"%m": "01",
 		"%M": "04",
 		"%n": "\n",
