@@ -30,6 +30,8 @@ type Parser struct {
 	conf       Options
 	lineParser LineParser
 	nower      Nower
+
+	warnedAboutTime bool
 }
 
 type Nower interface {
@@ -135,11 +137,11 @@ func (p *Parser) getTimestamp(m map[string]interface{}) time.Time {
 		if t, found := m[p.conf.TimeFieldName]; found {
 			ts = p.tryTimeFormats(t.(string))
 			if ts.IsZero() {
-				// we found the time field but failed to parse it
+				p.warnAboutTime(p.conf.TimeFieldName, t, "found time field but failed to parse")
 				ts = p.nower.Now()
 			}
 		} else {
-			// we were told to look for specific time field and failed to find it
+			p.warnAboutTime(p.conf.TimeFieldName, nil, "couldn't find specified time field")
 			ts = p.nower.Now()
 		}
 		// we were told to look for a specific field;
@@ -158,6 +160,7 @@ func (p *Parser) getTimestamp(m map[string]interface{}) time.Time {
 				if !ts.IsZero() {
 					break
 				}
+				p.warnAboutTime(timeField, t, "inferred timestamp field but failed parse as valid time")
 			}
 		}
 	}
@@ -202,4 +205,12 @@ func (p *Parser) tryTimeFormats(t string) time.Time {
 		ts = tOther
 	}
 	return ts
+}
+
+func (p *Parser) warnAboutTime(fieldName string, foundTimeVal interface{}, msg string) {
+	if p.warnedAboutTime {
+		return
+	}
+	logrus.WithField("time_field", fieldName).WithField("time_value", foundTimeVal).Warn(msg + "\n  Please refer to https://honeycomb.io/docs/json#timestamp-parsing")
+	p.warnedAboutTime = true
 }
