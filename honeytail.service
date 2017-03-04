@@ -6,6 +6,8 @@ After=network.target
 ExecStart=/usr/bin/honeytail -c /etc/honeytail/honeytail.conf
 KillMode=process
 Restart=on-failure
+User=honeycomb
+Group=honeycomb
 
 [Install]
 Alias=honeytail honeytail.service

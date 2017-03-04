@@ -9,4 +9,4 @@ stop on runlevel [!2345]
 
 respawn
 
-exec /usr/bin/honeytail -c /etc/honeytail/honeytail.conf
+exec su -s /bin/sh -c 'exec "$0" "$@"' honeycomb -- /usr/bin/honeytail -c /etc/honeytail/honeytail.conf

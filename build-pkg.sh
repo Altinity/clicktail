@@ -28,6 +28,7 @@ fpm -s dir -n honeytail \
     -p $GOPATH/bin \
     -v $version \
     -t $pkg_type \
+    --pre-install=./preinstall \
     $GOPATH/bin/honeytail=/usr/bin/honeytail \
     ./honeytail.upstart=/etc/init/honeytail.conf \
     ./honeytail.service=/lib/systemd/system/honeytail.service \

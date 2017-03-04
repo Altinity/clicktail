@@ -14,7 +14,17 @@ dist: trusty
 go:
     - 1.6
 
-script: go test github.com/honeycombio/honeytail/...
+script:
+    - set -e
+# Run tests
+    - go test github.com/honeycombio/honeytail/...
+# Build binary and packages
+    - go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/honeycombio/honeytail/...
+    - $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
+    - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t deb
+    - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t rpm
+# Check that packages install
+    - pkg-test/test.sh "1.${TRAVIS_BUILD_NUMBER}"
 
 before_install:
     # Install fpm for deb/rpm package building
@@ -24,10 +34,3 @@ before_install:
 
 install:
         - true # HACK: fixes travis-CI lack of support for vendor/ + godeps
-
-after_success:
-    - rm $GOPATH/bin/honeytail
-    - go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/honeycombio/honeytail/...
-    - $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
-    - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t deb
-    - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t rpm
