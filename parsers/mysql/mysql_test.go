@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -51,9 +52,8 @@ var sqds = []slowQueryData{
 			"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
 		},
 		sq: map[string]interface{}{
-			userKey:     "someuser",
-			clientKey:   "hostfoo",
-			clientIPKey: "192.168.2.1",
+			userKey:   "someuser",
+			clientKey: "hostfoo [192.168.2.1]",
 		},
 		timestamp: tUnparseable,
 	},
@@ -63,9 +63,19 @@ var sqds = []slowQueryData{
 			"# User@Host: root @ localhost []  Id:   233",
 		},
 		sq: map[string]interface{}{
-			userKey:     "root",
-			clientKey:   "localhost",
-			clientIPKey: "",
+			userKey:   "root",
+			clientKey: "localhost []",
+		},
+		timestamp: tUnparseable,
+	},
+	{ /* 2a */
+		rawE: []string{
+			"# Time: not-a-parsable-time-stampZ",
+			"# User@Host: root @ []  Id:   233",
+		},
+		sq: map[string]interface{}{
+			userKey:   "root",
+			clientKey: "[]",
 		},
 		timestamp: tUnparseable,
 	},
@@ -75,9 +85,8 @@ var sqds = []slowQueryData{
 			"# User@Host: root[root] @  [10.0.1.76]  Id: 325920",
 		},
 		sq: map[string]interface{}{
-			userKey:     "root",
-			clientKey:   "",
-			clientIPKey: "10.0.1.76",
+			userKey:   "root",
+			clientKey: "[10.0.1.76]",
 		},
 		timestamp: tUnparseable,
 	},
@@ -87,9 +96,8 @@ var sqds = []slowQueryData{
 			"# User@Host: root[root] @ foobar [10.0.1.76]  Id: 325920",
 		},
 		sq: map[string]interface{}{
-			userKey:     "root",
-			clientKey:   "foobar",
-			clientIPKey: "10.0.1.76",
+			userKey:   "root",
+			clientKey: "foobar [10.0.1.76]",
 		},
 		timestamp: tUnparseable,
 	},
@@ -258,8 +266,7 @@ var sqds = []slowQueryData{
 		},
 		sq: map[string]interface{}{
 			userKey:            "someuser",
-			clientKey:          "hostfoo",
-			clientIPKey:        "192.168.2.1",
+			clientKey:          "hostfoo [192.168.2.1]",
 			queryKey:           "SELECT * FROM orders WHERE total > 1000",
 			normalizedQueryKey: "select * from orders where total > ?",
 			tablesKey:          "orders",
@@ -276,8 +283,7 @@ var sqds = []slowQueryData{
 		},
 		sq: map[string]interface{}{
 			userKey:            "someuser",
-			clientKey:          "hostfoo",
-			clientIPKey:        "192.168.2.1",
+			clientKey:          "hostfoo [192.168.2.1]",
 			queryKey:           "SELECT /* from mysql.go:245 */ /* another comment */ * FROM orders WHERE total > 1000",
 			normalizedQueryKey: "select * from orders where total > ?",
 			tablesKey:          "orders",
@@ -317,8 +323,7 @@ var sqds = []slowQueryData{
 		},
 		sq: map[string]interface{}{
 			userKey:            "rw",
-			clientKey:          "",
-			clientIPKey:        "10.96.81.110",
+			clientKey:          "[10.96.81.110]",
 			queryTimeKey:       1.294391,
 			lockTimeKey:        0.000119,
 			rowsSentKey:        4049,
@@ -368,8 +373,7 @@ var sqds = []slowQueryData{
 		},
 		sq: map[string]interface{}{
 			userKey:            "rw",
-			clientKey:          "",
-			clientIPKey:        "10.96.81.110",
+			clientKey:          "[10.96.81.110]",
 			queryTimeKey:       1.294391,
 			lockTimeKey:        0.000119,
 			rowsSentKey:        4049,
@@ -414,13 +418,13 @@ var sqds = []slowQueryData{
 		},
 		sq: map[string]interface{}{
 			userKey:            "weaverw",
-			clientKey:          nil,
-			clientIPKey:        "10.14.214.13",
+			clientKey:          "[10.14.214.13]",
 			queryTimeKey:       10.749944,
 			lockTimeKey:        0.017599,
 			rowsSentKey:        0,
 			rowsExaminedKey:    0,
 			rowsAffectedKey:    10,
+			databaseKey:        "weave3",
 			queryKey:           "SELECT COUNT(*) FROM foo",
 			normalizedQueryKey: "select count(*) from foo",
 			statementKey:       "select",
@@ -445,8 +449,7 @@ var sqds = []slowQueryData{
 		},
 		sq: map[string]interface{}{
 			userKey:            "rdsadmin",
-			clientKey:          "localhost",
-			clientIPKey:        "127.0.0.1",
+			clientKey:          "localhost [127.0.0.1]",
 			queryTimeKey:       0.000439,
 			lockTimeKey:        0.0,
 			rowsSentKey:        1,
@@ -469,6 +472,7 @@ func TestHandleEvent(t *testing.T) {
 		res, timestamp := p.handleEvent(sqd.rawE)
 		if len(res) != len(sqd.sq) {
 			t.Errorf("case num %d: expected to parse %d fields, got %d", i, len(sqd.sq), len(res))
+			fmt.Printf("res is %+v\n", res)
 		}
 		for k, v := range sqd.sq {
 			if !reflect.DeepEqual(res[k], v) {
@@ -546,8 +550,7 @@ func TestProcessLines(t *testing.T) {
 				{
 					Timestamp: ts1,
 					Data: map[string]interface{}{
-						"client":           "hostfoo",
-						"client_ip":        "192.168.2.1",
+						"client":           "hostfoo [192.168.2.1]",
 						"user":             "someuser",
 						"query_time":       0.000073,
 						"lock_time":        0.0,
@@ -562,8 +565,7 @@ func TestProcessLines(t *testing.T) {
 				{
 					Timestamp: ts1,
 					Data: map[string]interface{}{
-						"client":           "hostbar",
-						"client_ip":        "192.168.2.1",
+						"client":           "hostbar [192.168.2.1]",
 						"user":             "otheruser",
 						"query_time":       0.00457,
 						"lock_time":        0.1,
@@ -593,8 +595,7 @@ func TestProcessLines(t *testing.T) {
 				{
 					Timestamp: time.Unix(1444264264, 0),
 					Data: map[string]interface{}{
-						"client":           "",
-						"client_ip":        "10.252.9.33",
+						"client":           "[10.252.9.33]",
 						"user":             "rails",
 						"query_time":       0.030974,
 						"lock_time":        0.000019,
@@ -609,8 +610,7 @@ func TestProcessLines(t *testing.T) {
 				{
 					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
 					Data: map[string]interface{}{
-						"client":           "",
-						"client_ip":        "10.252.9.33",
+						"client":           "[10.252.9.33]",
 						"user":             "rails",
 						"query_time":       0.002280,
 						"lock_time":        0.000023,
@@ -646,8 +646,7 @@ func TestProcessLines(t *testing.T) {
 				{
 					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
 					Data: map[string]interface{}{
-						"client":           "",
-						"client_ip":        "10.252.9.33",
+						"client":           "[10.252.9.33]",
 						"user":             "rails",
 						"query_time":       0.002280,
 						"lock_time":        0.000023,
@@ -662,8 +661,7 @@ func TestProcessLines(t *testing.T) {
 				{
 					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
 					Data: map[string]interface{}{
-						"client":           "",
-						"client_ip":        "10.252.9.33",
+						"client":           "[10.252.9.33]",
 						"user":             "rails",
 						"query_time":       0.002280,
 						"lock_time":        0.000023,
@@ -696,8 +694,7 @@ func TestProcessLines(t *testing.T) {
 				{
 					Timestamp: time.Unix(1444264264, 0), // should pick up the SET timestamp=... cmd
 					Data: map[string]interface{}{
-						"client":           "",
-						"client_ip":        "10.252.9.33",
+						"client":           "[10.252.9.33]",
 						"user":             "rails",
 						"query_time":       0.002280,
 						"lock_time":        0.000023,

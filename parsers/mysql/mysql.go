@@ -57,7 +57,6 @@ const (
 	// Event attributes
 	userKey            = "user"
 	clientKey          = "client"
-	clientIPKey        = "client_ip"
 	queryTimeKey       = "query_time"
 	lockTimeKey        = "lock_time"
 	rowsSentKey        = "rows_sent"
@@ -99,7 +98,7 @@ const (
 var (
 	reTime             = parsers.ExtRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
 	reAdminPing        = parsers.ExtRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
-	reUser             = parsers.ExtRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+).*$")}
+	reUser             = parsers.ExtRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+?)( Id:.+)?$")}
 	reQueryStats       = parsers.ExtRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
 	reServStats        = parsers.ExtRegexp{regexp.MustCompile("^# Bytes_sent: (?P<bytesSent>[0-9.]+) *Tmp_tables: (?P<tmpTables>[0-9.]+) *Tmp_disk_tables: (?P<tmpDiskTables>[0-9]+) *Tmp_table_sizes: (?P<tmpTableSizes>[0-9]+).*$")}
 	reInnodbTrx        = parsers.ExtRegexp{regexp.MustCompile("^# InnoDB_trx_id: (?P<trxId>[A-F0-9]+) *$")}
@@ -400,15 +399,7 @@ func (p *Parser) handleEvent(rawE []string) (map[string]interface{}, time.Time) 
 		} else if _, mg := reUser.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			sq[userKey] = strings.Split(mg["user"], "[")[0]
-			hostAndIP := strings.Split(mg["host"], " ")
-			switch len(hostAndIP) {
-			case 0: // do nothing
-			case 1:
-				sq[clientIPKey] = hostAndIP[0][1 : len(hostAndIP[0])-1]
-			default:
-				sq[clientKey] = hostAndIP[0]
-				sq[clientIPKey] = hostAndIP[1][1 : len(hostAndIP[1])-1]
-			}
+			sq[clientKey] = strings.TrimSpace(mg["host"])
 		} else if _, mg := reQueryStats.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			if queryTime, err := strconv.ParseFloat(mg["queryTime"], 64); err == nil {
