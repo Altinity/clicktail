@@ -405,24 +405,15 @@ func TestSampleRate(t *testing.T) {
 	testEquals(t, ts.rsp.reqBody, `{"format":"json49"}`)
 	sampleRate := ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "1")
-
 	ts.rsp.reset()
+
 	opts.SampleRate = 3
-	run(opts)
-	// setting a sample rate of 3 and a rand seed of 1, 16 requests.
-	// libhoney does the sampling
-	testEquals(t, ts.rsp.reqCounter, 16)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json47"}`)
-	sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
-	testEquals(t, sampleRate, "3")
-	ts.rsp.reset()
-
 	opts.TailSample = true
 	run(opts)
 	// setting a sample rate of 3 gets 17 requests.
 	// tail does the sampling
 	testEquals(t, ts.rsp.reqCounter, 17)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json40"}`)
+	testEquals(t, ts.rsp.reqBody, `{"format":"json49"}`)
 	sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
 	testEquals(t, sampleRate, "3")
 }

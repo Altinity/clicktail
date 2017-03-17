@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"strings"
 	"testing"
@@ -739,6 +740,34 @@ func TestProcessLines(t *testing.T) {
 		if len(send) > 0 {
 			t.Errorf("unexpected: %d additional events were extracted", len(send))
 		}
+	}
+	// test sampling
+	rand.Seed(3)
+	var numEvents int
+	for _, tt := range tsts {
+		p := &Parser{
+			SampleRate: 3,
+			nower:      &FakeNower{},
+			normalizer: &normalizer.Parser{},
+		}
+		lines := make(chan string, 10)
+		send := make(chan event.Event, 5)
+		go func() {
+			p.ProcessLines(lines, send, nil)
+			close(send)
+		}()
+		for _, line := range tt.in {
+			lines <- line
+		}
+		close(lines)
+		for range send {
+			// just count the number of events we're getting on the downstream side of
+			// sampling, verify it's fewer than we sent in.
+			numEvents++
+		}
+	}
+	if numEvents != 5 {
+		t.Errorf("With sampling enabled, only expected 5 events, got %d", numEvents)
 	}
 }
 

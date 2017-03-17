@@ -113,9 +113,9 @@ func run(options GlobalOptions) {
 			close(realToBeSent)
 		}()
 
-		// start up the sender
-		go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending,
-			options.TailSample)
+		// start up the sender. all sources are either sampled when tailing or in-
+		// parser, so always tell libhoney events are pre-sampled
+		go sendToLibhoney(realToBeSent, toBeResent, delaySending, doneSending)
 
 		// start a goroutine that reads from responses and logs.
 		responses := libhoney.Responses()
@@ -156,7 +156,9 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 		parser = &mongodb.Parser{}
 		opts = &options.Mongo
 	case "mysql":
-		parser = &mysql.Parser{}
+		parser = &mysql.Parser{
+			SampleRate: int(options.SampleRate),
+		}
 		opts = &options.MySQL
 	case "arangodb":
 		parser = &arangodb.Parser{}
@@ -330,7 +332,7 @@ func whitelistKey(whiteKeys []string, key string) bool {
 // sendToLibhoney reads from the toBeSent channel and shoves the events into
 // libhoney events, sending them on their way.
 func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
-	delaySending chan int, doneSending chan bool, presampled bool) {
+	delaySending chan int, doneSending chan bool) {
 	for {
 		// check and see if we need to back off the API because of rate limiting
 		select {
@@ -343,7 +345,7 @@ func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
 		case ev := <-toBeResent:
 			// retransmitted events have already been sampled; always use
 			// SendPresampled() for these
-			sendEvent(ev, true)
+			sendEvent(ev)
 			continue
 		default:
 		}
@@ -356,7 +358,7 @@ func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
 				doneSending <- true
 				return
 			}
-			sendEvent(ev, presampled)
+			sendEvent(ev)
 			continue
 		default:
 		}
@@ -366,7 +368,7 @@ func sendToLibhoney(toBeSent chan event.Event, toBeResent chan event.Event,
 }
 
 // sendEvent does the actual handoff to libhoney
-func sendEvent(ev event.Event, presampled bool) {
+func sendEvent(ev event.Event) {
 	libhEv := libhoney.NewEvent()
 	libhEv.Metadata = ev
 	libhEv.Timestamp = ev.Timestamp
@@ -376,13 +378,7 @@ func sendEvent(ev event.Event, presampled bool) {
 			"error": err,
 		}).Error("Unexpected error adding data to libhoney event")
 	}
-	var err error
-	if presampled {
-		err = libhEv.SendPresampled()
-	} else {
-		err = libhEv.Send()
-	}
-	if err != nil {
+	if err := libhEv.SendPresampled(); err != nil {
 		logrus.WithFields(logrus.Fields{
 			"event": ev,
 			"error": err,

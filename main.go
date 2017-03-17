@@ -192,7 +192,8 @@ func addParserDefaultOptions(options *GlobalOptions) {
 		options.RequestShape = append(options.RequestShape, "request")
 	}
 	if options.Reqs.ParserName != "mysql" {
-		// mysql is the only parser that requires post-parsed sampling.
+		// mysql is the only parser that requires in-parser sampling because it has
+		// a multi-line log format.
 		// Sample all other parser when tailing to conserve CPU
 		options.TailSample = true
 	} else {
