@@ -34,10 +34,9 @@ ENV NGINX_ACCESS_LOG_FILENAME access.log
 CMD [ "/bin/sh", "-c", "honeytail \
             --parser nginx \
             --writekey $HONEYCOMB_WRITE_KEY \
-            --file /var/log/nginx/$NGINX_ACCESS_LOG_FILENAME" \
+            --file /var/log/nginx/$NGINX_ACCESS_LOG_FILENAME \
             --dataset nginx \
             --samplerate $HONEYCOMB_SAMPLE_RATE \
             --nginx.conf $NGINX_CONF \
             --nginx.format $NGINX_LOG_FORMAT_NAME \
-            --tail.read_from end \
-            ]
+            --tail.read_from end" ]
