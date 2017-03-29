@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/honeycombio/honeytail",
-	"GoVersion": "go1.6",
-	"GodepVersion": "v74",
+	"GoVersion": "go1.8",
+	"GodepVersion": "v79",
 	"Deps": [
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
@@ -91,6 +91,10 @@
 			"ImportPath": "github.com/jessevdk/go-flags",
 			"Comment": "v1-372-g4cc2832",
 			"Rev": "4cc2832a6e6d1d3b815e2b9d544b2a4dfb3ce8fa"
+		},
+		{
+			"ImportPath": "github.com/kr/logfmt",
+			"Rev": "b84e30acd515aadc4b783ad4ff83aff3299bdfe0"
 		},
 		{
 			"ImportPath": "github.com/xwb1989/sqlparser/dependency/bson",

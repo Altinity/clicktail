@@ -17,6 +17,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers"
 	"github.com/honeycombio/honeytail/parsers/arangodb"
 	"github.com/honeycombio/honeytail/parsers/htjson"
+	"github.com/honeycombio/honeytail/parsers/keyval"
 	"github.com/honeycombio/honeytail/parsers/mongodb"
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
@@ -152,6 +153,9 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 	case "json":
 		parser = &htjson.Parser{}
 		opts = &options.JSON
+	case "keyval":
+		parser = &keyval.Parser{}
+		opts = &options.KeyVal
 	case "mongo", "mongodb":
 		parser = &mongodb.Parser{}
 		opts = &options.Mongo

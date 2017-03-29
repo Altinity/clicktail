@@ -17,6 +17,7 @@ import (
 
 	"github.com/honeycombio/honeytail/parsers/arangodb"
 	"github.com/honeycombio/honeytail/parsers/htjson"
+	"github.com/honeycombio/honeytail/parsers/keyval"
 	"github.com/honeycombio/honeytail/parsers/mongodb"
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
@@ -30,11 +31,12 @@ var BuildID string
 var version string
 
 var validParsers = []string{
-	"nginx",
-	"mongo",
-	"json",
-	"mysql",
 	"arangodb",
+	"json",
+	"keyval",
+	"mongo",
+	"mysql",
+	"nginx",
 }
 
 // GlobalOptions has all the top level CLI flags that honeytail supports
@@ -66,11 +68,12 @@ type GlobalOptions struct {
 
 	Tail tail.TailOptions `group:"Tail Options" namespace:"tail"`
 
-	Nginx    nginx.Options    `group:"Nginx Parser Options" namespace:"nginx"`
-	JSON     htjson.Options   `group:"JSON Parser Options" namespace:"json"`
-	MySQL    mysql.Options    `group:"MySQL Parser Options" namespace:"mysql"`
-	Mongo    mongodb.Options  `group:"MongoDB Parser Options" namespace:"mongo"`
 	ArangoDB arangodb.Options `group:"ArangoDB Parser Options" namespace:"arangodb"`
+	JSON     htjson.Options   `group:"JSON Parser Options" namespace:"json"`
+	KeyVal   keyval.Options   `group:"KeyVal Parser Options" namespace:"keyval"`
+	Mongo    mongodb.Options  `group:"MongoDB Parser Options" namespace:"mongo"`
+	MySQL    mysql.Options    `group:"MySQL Parser Options" namespace:"mysql"`
+	Nginx    nginx.Options    `group:"Nginx Parser Options" namespace:"nginx"`
 }
 
 type RequiredOptions struct {
