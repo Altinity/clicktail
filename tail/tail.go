@@ -60,8 +60,8 @@ type State struct {
 
 // GetSampledEntries wraps GetEntries and returns a list of channels that
 // provide sampled entries
-func GetSampledEntries(conf Config, sampleRate uint) ([]chan string, error) {
-	unsampledLinesChans, err := GetEntries(conf)
+func GetSampledEntries(conf Config, sampleRate uint, abort chan struct{}) ([]chan string, error) {
+	unsampledLinesChans, err := GetEntries(conf, abort)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func shouldDrop(rate uint) bool {
 
 // GetEntries sets up a list of channels that get one line at a time from each
 // file down each channel.
-func GetEntries(conf Config) ([]chan string, error) {
+func GetEntries(conf Config, abort chan struct{}) ([]chan string, error) {
 	if conf.Type != RotateStyleSyslog {
 		return nil, errors.New("Only Syslog style rotation currently supported")
 	}
@@ -129,14 +129,14 @@ func GetEntries(conf Config) ([]chan string, error) {
 	for _, file := range filenames {
 		var lines chan string
 		if file == "-" {
-			lines = tailStdIn()
+			lines = tailStdIn(abort)
 		} else {
 			stateFile := getStateFile(conf, file, numFiles)
 			tailer, err := getTailer(conf, file, stateFile)
 			if err != nil {
 				return nil, err
 			}
-			lines = tailSingleFile(tailer, file, stateFile)
+			lines = tailSingleFile(tailer, file, stateFile, abort)
 		}
 		linesChans = append(linesChans, lines)
 	}
@@ -168,7 +168,7 @@ func removeStateFiles(files []string, conf Config) []string {
 	return newFiles
 }
 
-func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan string {
+func tailSingleFile(tailer *tail.Tail, file string, stateFile string, abort chan struct{}) chan string {
 	lines := make(chan string)
 	// TODO report some metric to indicate whether we're keeping up with the
 	// front of the file, of if it's being written faster than we can send
@@ -191,12 +191,23 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan strin
 	}()
 
 	go func() {
-		for line := range tailer.Lines {
-			if line.Err != nil {
-				// skip errored lines
-				continue
+	ReadLines:
+		for {
+			select {
+			case line, ok := <-tailer.Lines:
+				if !ok {
+					// tailer.Lines is closed
+					break ReadLines
+				}
+				if line.Err != nil {
+					// skip errored lines
+					continue
+				}
+				lines <- strings.TrimSpace(line.Text)
+			case <-abort:
+				// will only trigger when abort is closed
+				break ReadLines
 			}
-			lines <- strings.TrimSpace(line.Text)
 		}
 		close(lines)
 		ticker.Stop()
@@ -208,12 +219,18 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string) chan strin
 
 // tailStdIn is a special case to tail STDIN without any of the
 // fancy stuff that the tail module provides
-func tailStdIn() chan string {
+func tailStdIn(abort chan struct{}) chan string {
 	lines := make(chan string)
 	input := bufio.NewReader(os.Stdin)
 	go func() {
 		defer close(lines)
 		for {
+			// check for signal triggered exit
+			select {
+			case <-abort:
+				return
+			default:
+			}
 			line, partialLine, err := input.ReadLine()
 			if err != nil {
 				logrus.Debug("stdin is closed")

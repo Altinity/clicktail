@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 )
@@ -35,7 +36,7 @@ func TestTailSingleFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := tailSingleFile(tailer, filename, statefilename)
+	lines := tailSingleFile(tailer, filename, statefilename, ts.abort)
 	checkLinesChan(t, lines, jsonLines)
 }
 
@@ -48,7 +49,7 @@ func TestTailSTDIN(t *testing.T) {
 		Paths:   make([]string, 1),
 	}
 	conf.Paths[0] = "-"
-	lineChans, err := GetEntries(conf)
+	lineChans, err := GetEntries(conf, ts.abort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +82,7 @@ func TestGetSampledEntries(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetSampledEntries(conf, 2)
+	chanArr, err := GetSampledEntries(conf, 2, ts.abort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +117,7 @@ func TestGetEntries(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		jsonLines[i] = make([]string, 3)
 		for j := 0; j < 3; j++ {
-			jsonLines[i][j] = fmt.Sprintf("{\"a\":%d", i)
+			jsonLines[i][j] = fmt.Sprintf("{\"a\":%d}", i)
 		}
 
 		filename := filenameRoot + fmt.Sprint(i)
@@ -124,7 +125,7 @@ func TestGetEntries(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetEntries(conf)
+	chanArr, err := GetEntries(conf, ts.abort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,12 +145,52 @@ func TestGetEntries(t *testing.T) {
 			StateFile: fn1,
 		},
 	}
-	nilChan, err := GetEntries(conf)
+	nilChan, err := GetEntries(conf, ts.abort)
 	if nilChan != nil {
 		t.Error("errored getEntries was supposed to respond with a nil channel list")
 	}
 	if err == nil {
 		t.Error("expected error from GetEntries; got nil instead.")
+	}
+}
+
+func TestAbortChannel(t *testing.T) {
+	ts := &testSetup{}
+	ts.start(t)
+	defer ts.stop()
+
+	var tailWait = TailOptions{
+		ReadFrom: "start",
+		Stop:     false,
+	}
+
+	conf := Config{
+		Paths:   make([]string, 3),
+		Options: tailWait,
+	}
+
+	jsonLines := make([][]string, 3)
+	filenameRoot := ts.tmpdir + "/json.log"
+	for i := 0; i < 3; i++ {
+		jsonLines[i] = make([]string, 3)
+		for j := 0; j < 3; j++ {
+			jsonLines[i][j] = fmt.Sprintf("{\"a\":%d}", i)
+		}
+
+		filename := filenameRoot + fmt.Sprint(i)
+		conf.Paths[i] = filename
+		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
+	}
+
+	chanArr, err := GetEntries(conf, ts.abort)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// ok, let's see what happens when we want to quit
+	close(ts.abort)
+	for _, ch := range chanArr {
+		checkLinesChanClosed(t, ch)
 	}
 }
 
@@ -236,6 +277,7 @@ func TestGetStateFile(t *testing.T) {
 // to create an environment in which to run these tests
 type testSetup struct {
 	tmpdir string
+	abort  chan struct{}
 }
 
 func (ts *testSetup) start(t *testing.T) {
@@ -245,6 +287,7 @@ func (ts *testSetup) start(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts.tmpdir = tmpdir
+	ts.abort = make(chan struct{})
 }
 
 func (ts *testSetup) writeFile(t *testing.T, path string, body string) {
@@ -270,5 +313,20 @@ func checkLinesChan(t *testing.T, actual chan string, expected []string) {
 	}
 	if idx != len(expected) {
 		t.Errorf("read %d lines from lines channel; expected %d", idx, len(expected))
+	}
+}
+
+func checkLinesChanClosed(t *testing.T, actual chan string) {
+	// this will block if actual never gets closed
+	for {
+		select {
+		case _, ok := <-actual:
+			if !ok {
+				return
+			}
+		case <-time.After(1 * time.Second):
+			t.Error("channel read timed out; channel not closed")
+			return
+		}
 	}
 }
