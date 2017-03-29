@@ -2,6 +2,7 @@
 package keyval
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -23,12 +24,15 @@ var possibleTimeFieldNames = []string{
 type Options struct {
 	TimeFieldName string `long:"timefield" description:"Name of the field that contains a timestamp"`
 	Format        string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
+	FilterRegex   string `long:"filter_regex" description:"a regular expression that will filter the input stream and only parse lines that match"`
+	InvertFilter  bool   `long:"invert_filter" description:"change the filter_regex to only process lines that do *not* match"`
 }
 
 type Parser struct {
-	conf       Options
-	lineParser LineParser
-	nower      Nower
+	conf        Options
+	lineParser  LineParser
+	nower       Nower
+	filterRegex *regexp.Regexp
 
 	warnedAboutTime bool
 }
@@ -45,6 +49,9 @@ func (r *RealNower) Now() time.Time {
 
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
+	if p.conf.FilterRegex != "" {
+		p.filterRegex = regexp.MustCompile(p.conf.FilterRegex)
+	}
 
 	p.nower = &RealNower{}
 	p.lineParser = &KeyValLineParser{}
@@ -88,6 +95,18 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		logrus.WithFields(logrus.Fields{
 			"line": line,
 		}).Debug("Attempting to process keyval log line")
+
+		// if matching regex is set, filter lines here
+		if p.filterRegex != nil {
+			matched := p.filterRegex.MatchString(line)
+			if matched && !p.conf.InvertFilter {
+				logrus.WithFields(logrus.Fields{
+					"line":    line,
+					"matched": matched,
+				}).Debug("skipping line due to FilterMatch.")
+				continue
+			}
+		}
 
 		// take care of any headers on the line
 		var prefixFields map[string]string
