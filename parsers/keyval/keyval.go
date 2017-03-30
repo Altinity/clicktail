@@ -50,7 +50,10 @@ func (r *RealNower) Now() time.Time {
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	if p.conf.FilterRegex != "" {
-		p.filterRegex = regexp.MustCompile(p.conf.FilterRegex)
+		var err error
+		if p.filterRegex, err = regexp.Compile(p.conf.FilterRegex); err != nil {
+			return err
+		}
 	}
 
 	p.nower = &RealNower{}
@@ -99,7 +102,8 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		// if matching regex is set, filter lines here
 		if p.filterRegex != nil {
 			matched := p.filterRegex.MatchString(line)
-			if matched && !p.conf.InvertFilter {
+			// if both are true or both are false, skip. else continue
+			if matched == p.conf.InvertFilter {
 				logrus.WithFields(logrus.Fields{
 					"line":    line,
 					"matched": matched,
@@ -117,13 +121,29 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		}
 
 		parsedLine, err := p.lineParser.ParseLine(line)
-
 		if err != nil {
 			// skip lines that won't parse
 			logrus.WithFields(logrus.Fields{
 				"line":  line,
 				"error": err,
 			}).Debug("skipping line; failed to parse.")
+			continue
+		}
+		if len(parsedLine) == 0 {
+			// skip empty lines, as determined by the parser
+			logrus.WithFields(logrus.Fields{
+				"line":  line,
+				"error": err,
+			}).Debug("skipping line; no key/val pairs found.")
+			continue
+		}
+		if allEmpty(parsedLine) {
+			// skip events for which all fields are the empty string, because that's
+			// probably broken
+			logrus.WithFields(logrus.Fields{
+				"line":  line,
+				"error": err,
+			}).Debug("skipping line; all values are the empty string.")
 			continue
 		}
 		// merge the prefix fields and the parsed line contents
@@ -142,6 +162,24 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		send <- e
 	}
 	logrus.Debug("lines channel is closed, ending keyval processor")
+}
+
+// allEmpty returns true if all values in the map are the empty string
+// TODO move this into the main honeytail loop instead of the keyval parser
+func allEmpty(pl map[string]interface{}) bool {
+	for _, v := range pl {
+		vStr, ok := v.(string)
+		if !ok {
+			// wouldn't coerce to string, so it must have something that's not an
+			// empty string
+			return false
+		}
+		if vStr != "" {
+			return false
+		}
+	}
+	// we've gone through the entire map and every field value has matched ""
+	return true
 }
 
 // getTimestamp looks through the event map for something that looks
@@ -246,4 +284,14 @@ func (p *Parser) warnAboutTime(fieldName string, foundTimeVal interface{}, msg s
 	}
 	logrus.WithField("time_field", fieldName).WithField("time_value", foundTimeVal).Warn(msg + "\n  Please refer to https://honeycomb.io/docs/json#timestamp-parsing")
 	p.warnedAboutTime = true
+}
+
+type NoopLineParser struct {
+	incomingLine string
+	outgoingMap  map[string]interface{}
+}
+
+func (n *NoopLineParser) ParseLine(line string) (map[string]interface{}, error) {
+	n.incomingLine = line
+	return n.outgoingMap, nil
 }
