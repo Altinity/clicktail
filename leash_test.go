@@ -84,12 +84,11 @@ func TestBasicSend(t *testing.T) {
 	run(opts)
 	testEquals(t, ts.rsp.reqCounter, 1)
 	testEquals(t, ts.rsp.evtCounter, 1)
-	testContains(t, ts.rsp.reqBody, `{"pika":`)
 	testContains(t, ts.rsp.reqBody, `{"format":"json"}`)
 	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
 	testEquals(t, teamID, "abcabc123123")
 	requestURL := ts.rsp.req.URL.Path
-	testEquals(t, requestURL, "/1/batch")
+	testEquals(t, requestURL, "/1/batch/pika")
 }
 
 func TestMultipleFiles(t *testing.T) {
@@ -115,13 +114,12 @@ func TestMultipleFiles(t *testing.T) {
 	run(opts)
 	testEquals(t, ts.rsp.reqCounter, 1)
 	testEquals(t, ts.rsp.evtCounter, 2)
-	testContains(t, ts.rsp.reqBody, `{"pika"`)
 	testContains(t, ts.rsp.reqBody, `{"key1":"val1"}`)
 	testContains(t, ts.rsp.reqBody, `{"key2":"val2"}`)
 	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
 	testEquals(t, teamID, "abcabc123123")
 	requestURL := ts.rsp.req.URL.Path
-	testEquals(t, requestURL, "/1/batch")
+	testEquals(t, requestURL, "/1/batch/pika")
 }
 
 func TestMultiLineMultiFile(t *testing.T) {
@@ -283,7 +281,7 @@ func TestLinePrefix(t *testing.T) {
 	fmt.Fprintf(logfh, `Nov 13 10:19:31 app23 process.port[pid]: {"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(opts)
-	testEquals(t, ts.rsp.reqBody, `{"format":"json","hostname":"app23","server_timestamp":"Nov 13 10:19:31"}`)
+	testContains(t, ts.rsp.reqBody, `{"format":"json","hostname":"app23","server_timestamp":"Nov 13 10:19:31"}`)
 }
 
 func TestRequestShapeRaw(t *testing.T) {
@@ -414,21 +412,11 @@ func TestSampleRate(t *testing.T) {
 	}
 	opts.Reqs.LogFiles = []string{sampleLogFile}
 	opts.TailSample = false
-	run(opts)
-	// with no sampling, 50 lines -> 50 requests
-	testEquals(t, ts.rsp.evtCounter, 50)
-	testContains(t, ts.rsp.reqBody, `{"format":"json46"}`)
-	testContains(t, ts.rsp.reqBody, `{"format":"json47"}`)
-	testContains(t, ts.rsp.reqBody, `{"format":"json48"}`)
-	testContains(t, ts.rsp.reqBody, `{"format":"json49"}`)
-	ts.rsp.reset()
 
-	opts.SampleRate = 3
 	run(opts)
-	// setting a sample rate of 3 and a rand seed of 1, 16 requests.
-	// libhoney does the sampling
-	testEquals(t, ts.rsp.evtCounter, 16)
-	testContains(t, ts.rsp.reqBody, `{"format":"json47"},"samplerate":3,`)
+	// with no sampling, 50 lines -> 50 events
+	testEquals(t, ts.rsp.evtCounter, 50)
+	testContains(t, ts.rsp.reqBody, `{"format":"json49"}`)
 	ts.rsp.reset()
 
 	opts.SampleRate = 3
@@ -436,15 +424,8 @@ func TestSampleRate(t *testing.T) {
 	run(opts)
 	// setting a sample rate of 3 gets 17 requests.
 	// tail does the sampling
-	//<<<<<<< HEAD
-	//testEquals(t, ts.rsp.reqCounter, 17)
-	//testEquals(t, ts.rsp.reqBody, `{"format":"json49"}`)
-	//sampleRate = ts.rsp.req.Header.Get("X-Honeycomb-Samplerate")
-	//testEquals(t, sampleRate, "3")
-	//=======
 	testEquals(t, ts.rsp.evtCounter, 17)
-	testContains(t, ts.rsp.reqBody, `{"format":"json40"},"samplerate":3,`)
-	//>>>>>>> Fix leash_test to prepare for gzipped/batched events by default
+	testContains(t, ts.rsp.reqBody, `{"format":"json49"},"samplerate":3,`)
 }
 
 func TestReadFromOffset(t *testing.T) {
@@ -533,14 +514,12 @@ func (r *responder) serveResponse(w http.ResponseWriter, req *http.Request) {
 		panic(err)
 	}
 
-	payload := make(map[string][]interface{})
+	payload := []map[string]interface{}{}
 	if len(body) > 0 {
 		if err := json.Unmarshal(body, &payload); err != nil {
 			r.evtCounter++ // likely not a batch request
 		} else {
-			for _, events := range payload {
-				r.evtCounter += len(events)
-			}
+			r.evtCounter += len(payload)
 		}
 	}
 	r.reqBody = string(body)
