@@ -33,9 +33,10 @@ var tailOptions = tail.TailOptions{
 // defaultOptions is a fully populated GlobalOptions with good defaults to start from
 var defaultOptions = GlobalOptions{
 	// each test will have to populate APIHost with the location of its test server
-	APIHost:    "",
-	SampleRate: 1,
-	NumSenders: 1,
+	APIHost:          "",
+	SampleRate:       1,
+	NumSenders:       1,
+	BatchFrequencyMs: 1000, // Longer batch sends to accommodate for slower CI machines
 	Reqs: RequiredOptions{
 		// using the json parser for everything because we're not testing parsers here.
 		ParserName: "json",

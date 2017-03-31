@@ -42,6 +42,7 @@ func run(options GlobalOptions) {
 		SampleRate:           options.SampleRate,
 		APIHost:              options.APIHost,
 		MaxConcurrentBatches: options.NumSenders,
+		SendFrequency:        time.Duration(options.BatchFrequencyMs) * time.Millisecond,
 		// block on send should be true so if we can't send fast enough, we slow
 		// down reading the log rather than drop lines.
 		BlockOnSend: true,

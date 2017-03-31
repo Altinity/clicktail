@@ -46,11 +46,12 @@ type GlobalOptions struct {
 
 	ConfigFile string `short:"c" long:"config" description:"Config file for honeytail in INI format." no-ini:"true"`
 
-	SampleRate     uint `short:"r" long:"samplerate" description:"Only send 1 / N log lines" default:"1"`
-	NumSenders     uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to Honeycomb" default:"10"`
-	Debug          bool `long:"debug" description:"Print debugging output"`
-	StatusInterval uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
-	Backfill       bool `long:"backfill" description:"Configure honeytail to ingest old data in order to backfill Honeycomb. Sets the correct values for --backoff, --tail.read_from, and --tail.stop"`
+	SampleRate       uint `short:"r" long:"samplerate" description:"Only send 1 / N log lines" default:"1"`
+	NumSenders       uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to Honeycomb" default:"10"`
+	BatchFrequencyMs uint `long:"send_frequency_ms" description:"How frequently to flush batches" default:"100"`
+	Debug            bool `long:"debug" description:"Print debugging output"`
+	StatusInterval   uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
+	Backfill         bool `long:"backfill" description:"Configure honeytail to ingest old data in order to backfill Honeycomb. Sets the correct values for --backoff, --tail.read_from, and --tail.stop"`
 
 	ScrubFields       []string `long:"scrub_field" description:"For the field listed, apply a one-way hash to the field content. May be specified multiple times"`
 	DropFields        []string `long:"drop_field" description:"Do not send the field to Honeycomb. May be specified multiple times"`
