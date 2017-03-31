@@ -5,12 +5,14 @@
 package libhoney
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -18,27 +20,30 @@ import (
 	"gopkg.in/alexcesaro/statsd.v2"
 )
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 const (
 	defaultSampleRate = 1
 	defaultAPIHost    = "https://api.honeycomb.io/"
-	version           = "1.1.2"
+	version           = "1.3.0"
 
 	// defaultmaxBatchSize how many events to collect in a batch
 	defaultmaxBatchSize = 50
 	// defaultbatchTimeout how frequently to send unfilled batches
 	defaultbatchTimeout = 100 * time.Millisecond
 	// defaultmaxConcurrentBatches how many batches to maintain in parallel
-	defaultmaxConcurrentBatches = 10
+	defaultmaxConcurrentBatches = 80
 	// defaultpendingWorkCapacity how many events to queue up for busy batches
 	defaultpendingWorkCapacity = 10000
 )
 
-// for validation
 var (
 	ptrKinds = []reflect.Kind{reflect.Ptr, reflect.Slice, reflect.Map}
 )
 
-// globals for singleton-like behavior
+// globals to support default/singleton-like behavior
 var (
 	tx     txClient
 	txOnce sync.Once
@@ -58,7 +63,7 @@ var (
 
 // UserAgentAddition is a variable set at compile time via -ldflags to allow you
 // to augment the "User-Agent" header that libhoney sends along with each event.
-// The default User-Agent is "libhoney-go/1.1.1". If you set this variable, its
+// The default User-Agent is "libhoney-go/<version>". If you set this variable, its
 // contents will be appended to the User-Agent string, separated by a space. The
 // expected format is product-name/version, eg "myapp/1.0"
 var UserAgentAddition string
@@ -138,6 +143,28 @@ type Event struct {
 	fieldHolder
 }
 
+// Marshaling an Event for batching up to the Honeycomb servers. Omits fields
+// that aren't specific to this particular event, and allows for behavior like
+// omitempty'ing a zero'ed out time.Time.
+func (e Event) MarshalJSON() ([]byte, error) {
+	tPointer := &(e.Timestamp)
+	if e.Timestamp.IsZero() {
+		tPointer = nil
+	}
+
+	// don't include sample rate if it's 1; this is the default
+	sampleRate := e.SampleRate
+	if sampleRate == 1 {
+		sampleRate = 0
+	}
+
+	return json.Marshal(struct {
+		Data       map[string]interface{} `json:"data"`
+		SampleRate uint                   `json:"samplerate,omitempty"`
+		Timestamp  *time.Time             `json:"time,omitempty"`
+	}{e.data, sampleRate, tPointer})
+}
+
 // Builder is used to create templates for new events, specifying default fields
 // and override settings.
 type Builder struct {
@@ -159,8 +186,62 @@ type Builder struct {
 }
 
 type fieldHolder struct {
-	data map[string]interface{}
+	data marshallableMap
 	lock sync.Mutex
+}
+
+// Wrapper type for custom JSON serialization: individual values that can't be
+// marshalled (or are null pointers) will be skipped, instead of causing
+// marshalling to raise an error.
+type marshallableMap map[string]interface{}
+
+func (m marshallableMap) MarshalJSON() ([]byte, error) {
+	keys := make([]string, len(m))
+	i := 0
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	out := bytes.NewBufferString("{")
+
+	first := true
+	for _, k := range keys {
+		b, ok := maybeMarshalValue(m[k])
+		if ok {
+			if first {
+				first = false
+			} else {
+				out.WriteByte(',')
+			}
+
+			out.WriteByte('"')
+			out.Write([]byte(k))
+			out.WriteByte('"')
+			out.WriteByte(':')
+			out.Write(b)
+		}
+	}
+	out.WriteByte('}')
+	return out.Bytes(), nil
+}
+
+func maybeMarshalValue(v interface{}) ([]byte, bool) {
+	if v == nil {
+		return nil, false
+	}
+	val := reflect.ValueOf(v)
+	kind := val.Type().Kind()
+	for _, ptrKind := range ptrKinds {
+		if kind == ptrKind && val.IsNil() {
+			return nil, false
+		}
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, false
+	}
+	return b, true
 }
 
 type dynamicField struct {
@@ -286,45 +367,12 @@ func NewEvent() *Event {
 }
 
 // AddField adds an individual metric to the event or builder on which it is
-// called.
+// called. Note that if you add a value that cannot be serialized to JSON (eg a
+// function or channel), the event will fail to send.
 func (f *fieldHolder) AddField(key string, val interface{}) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	// run a sanity check on data, transparently drop if it fails.
-	if validateData(val) {
-		f.data[key] = val
-	}
-}
-
-// validateData runs some checks on the data and returns false if it's bad data
-// and should be skipped
-func validateData(val interface{}) bool {
-	if val == nil {
-		return false
-	}
-	// if we can't json encode the value, we should skip it.
-	// TODO this is probably slow. Decide whether it's unacceptably slow.
-	_, err := json.Marshal(val)
-	if err != nil {
-		return false
-	}
-	return true
-}
-
-func validateValue(val reflect.Value) bool {
-	if val.Type().Kind() == reflect.Chan {
-		return false
-	}
-	kind := val.Type().Kind()
-	for _, ptrKind := range ptrKinds {
-		if kind == ptrKind && val.IsNil() {
-			return false
-		}
-	}
-	if validateData(val.Interface()) == false {
-		return false
-	}
-	return true
+	f.data[key] = val
 }
 
 // Add adds a complex data type to the event or builder on which it's called.
@@ -376,9 +424,7 @@ func (f *fieldHolder) addStruct(s interface{}) error {
 			fName = fieldInfo.Name
 		}
 
-		if validateValue(sVal.Field(i)) {
-			f.data[fName] = sVal.Field(i).Interface()
-		}
+		f.data[fName] = sVal.Field(i).Interface()
 	}
 	return nil
 }
@@ -403,9 +449,7 @@ func (f *fieldHolder) addMap(m interface{}) error {
 		default:
 			return fmt.Errorf("failed to add map: key type %s unaccepted", key.Type().Kind())
 		}
-		if validateValue(mVal.MapIndex(key)) {
-			f.data[keyStr] = mVal.MapIndex(key).Interface()
-		}
+		f.data[keyStr] = mVal.MapIndex(key).Interface()
 	}
 	return nil
 }

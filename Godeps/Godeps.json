@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/honeycombio/honeytail",
 	"GoVersion": "go1.8",
-	"GodepVersion": "v79",
+	"GodepVersion": "v74",
 	"Deps": [
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
@@ -32,7 +32,8 @@
 		},
 		{
 			"ImportPath": "github.com/honeycombio/libhoney-go",
-			"Rev": "4306e464c779afe1213a31167ca736bda93eafce"
+			"Comment": "godepsrestore-18-g78cb4a1",
+			"Rev": "78cb4a1942a1e2aa1e77592d1f66fe32b5806ef3"
 		},
 		{
 			"ImportPath": "github.com/honeycombio/mongodbtools/logparser",
