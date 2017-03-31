@@ -47,7 +47,7 @@ type GlobalOptions struct {
 	ConfigFile string `short:"c" long:"config" description:"Config file for honeytail in INI format." no-ini:"true"`
 
 	SampleRate       uint `short:"r" long:"samplerate" description:"Only send 1 / N log lines" default:"1"`
-	NumSenders       uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to Honeycomb" default:"10"`
+	NumSenders       uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to Honeycomb" default:"80"`
 	BatchFrequencyMs uint `long:"send_frequency_ms" description:"How frequently to flush batches" default:"100"`
 	Debug            bool `long:"debug" description:"Print debugging output"`
 	StatusInterval   uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
