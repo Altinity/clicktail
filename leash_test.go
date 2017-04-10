@@ -360,7 +360,7 @@ func TestRequestShapeRaw(t *testing.T) {
 	// test whitelisting keys foo, baz, and bend but not bar
 	opts.RequestQueryKeys = []string{"foo", "baz", "bend"}
 	tbs := make(chan event.Event)
-	output := requestShape(reqField, tbs, opts)
+	output := modifyEventContents(tbs, opts)
 	for input, expectedResult := range urlsWhitelistQuery {
 		ev := event.Event{
 			Data: map[string]interface{}{
@@ -381,7 +381,7 @@ func TestRequestShapeRaw(t *testing.T) {
 	// included
 	opts.RequestParseQuery = "all"
 	tbs = make(chan event.Event)
-	output = requestShape(reqField, tbs, opts)
+	output = modifyEventContents(tbs, opts)
 	for input, expectedResult := range urlsAllQuery {
 		ev := event.Event{
 			Data: map[string]interface{}{

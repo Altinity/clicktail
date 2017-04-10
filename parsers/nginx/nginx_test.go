@@ -72,7 +72,9 @@ func TestProcessLines(t *testing.T) {
 		},
 	}
 	p := &Parser{
-		conf: Options{},
+		conf: Options{
+			NumParsers: 5,
+		},
 		lineParser: &FakeLineParser{
 			tlm: tlm,
 		},
@@ -131,7 +133,9 @@ func TestProcessLinesNoPreReg(t *testing.T) {
 		},
 	}
 	p := &Parser{
-		conf: Options{},
+		conf: Options{
+			NumParsers: 5,
+		},
 		lineParser: &FakeLineParser{
 			tlm: tlm,
 		},

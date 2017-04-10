@@ -410,9 +410,14 @@ func TestProcessLines(t *testing.T) {
 		},
 	}
 	m := &Parser{
-		conf:       Options{},
-		nower:      nower,
-		lineParser: &MongoLineParser{},
+		conf: Options{
+			NumParsers: 5,
+		},
+		nower: nower,
+	}
+	m.lineParsers = make([]LineParser, m.conf.NumParsers)
+	for i := 0; i < m.conf.NumParsers; i++ {
+		m.lineParsers[i] = &MongoLineParser{}
 	}
 	lines := make(chan string)
 	send := make(chan event.Event)
@@ -425,32 +430,36 @@ func TestProcessLines(t *testing.T) {
 	}()
 	// spin up the processor to process our test lines
 	go m.ProcessLines(lines, send, nil)
-	for _, pair := range tlm {
+	for range tlm {
 		ev := <-send
-
-		if ev.Timestamp.UnixNano() != pair.expected.time.UnixNano() {
-			t.Errorf("Parsed timestamp didn't match up for %s.\n  Expected: %+v\n  Actual: %+v",
-				pair.line, pair.expected.time, ev.Timestamp)
-		}
-
-		var missing []string
-		for k := range pair.expected.includeData {
-			if _, ok := ev.Data[k]; !ok {
-				missing = append(missing, k)
-			} else if !reflect.DeepEqual(ev.Data[k], pair.expected.includeData[k]) {
-				t.Errorf("  Parsed data value %s didn't match up for %s.\n  Expected: %+v\n  Actual: %+v",
-					k, pair.line, pair.expected.includeData[k], ev.Data[k])
+		var found bool
+		for _, pair := range tlm {
+			if ev.Timestamp.UnixNano() != pair.expected.time.UnixNano() {
+				continue
 			}
-		}
-		if missing != nil {
-			t.Errorf("  Parsed data was missing keys for line: %s\n  Missing: %+v\n  Parsed data: %+v",
-				pair.line, missing, ev.Data)
-		}
-		for _, k := range pair.expected.excludeKeys {
-			if _, ok := ev.Data[k]; ok {
-				t.Errorf("  Parsed data included unexpected key %s for line: %s", k, pair.line)
+
+			var missing []string
+			for k := range pair.expected.includeData {
+				if _, ok := ev.Data[k]; !ok {
+					missing = append(missing, k)
+				} else if !reflect.DeepEqual(ev.Data[k], pair.expected.includeData[k]) {
+					continue
+				}
 			}
+			if missing != nil {
+				continue
+			}
+			for _, k := range pair.expected.excludeKeys {
+				if _, ok := ev.Data[k]; ok {
+					continue
+				}
+			}
+			found = true
 		}
+		if !found {
+			t.Errorf("couldn't find event %+v", ev)
+		}
+		found = false
 	}
 }
 

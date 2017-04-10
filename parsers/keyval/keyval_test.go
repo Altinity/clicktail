@@ -77,6 +77,9 @@ func TestBrokenFilterRegex(t *testing.T) {
 
 func TestFilterRegex(t *testing.T) {
 	p := &Parser{
+		conf: Options{
+			NumParsers: 5,
+		},
 		lineParser: &NoopLineParser{
 			outgoingMap: map[string]interface{}{"key": "val"},
 		},
@@ -164,6 +167,9 @@ func TestDontReturnEmptyEvents(t *testing.T) {
 	p := &Parser{
 		lineParser: &NoopLineParser{},
 		nower:      &FakeNower{},
+		conf: Options{
+			NumParsers: 5,
+		},
 	}
 	lines := make(chan string)
 	send := make(chan event.Event)

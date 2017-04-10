@@ -4,6 +4,7 @@ package mongodb
 import (
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -47,13 +48,16 @@ var timestampFormats = []string{
 
 type Options struct {
 	LogPartials bool `long:"log_partials" description:"Send what was successfully parsed from a line (only if the error occured in the log line's message)."`
+
+	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
 }
 
 type Parser struct {
-	conf       Options
-	lineParser LineParser
-	nower      Nower
+	conf        Options
+	lineParsers []LineParser
+	nower       Nower
 
+	lock              sync.RWMutex
 	currentReplicaSet string
 }
 
@@ -71,89 +75,104 @@ func (m *MongoLineParser) ParseLogLine(line string) (map[string]interface{}, err
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	p.nower = &RealNower{}
-	p.lineParser = &MongoLineParser{}
+	p.lineParsers = make([]LineParser, p.conf.NumParsers)
+	for i := 0; i < p.conf.NumParsers; i++ {
+		p.lineParsers[i] = &MongoLineParser{}
+	}
 	return nil
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
-	for line := range lines {
-		// take care of any headers on the line
-		var prefixFields map[string]string
-		if prefixRegex != nil {
-			var prefix string
-			prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
-			line = strings.TrimPrefix(line, prefix)
-		}
-		values, err := p.lineParser.ParseLogLine(line)
-		// we get a bunch of errors from the parser on mongo logs, skip em
-		if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
-			timestamp, err := p.parseTimestamp(values)
-			if err != nil {
-				logFailure(line, err, "couldn't parse logline timestamp, skipping")
-				continue
-			}
-			if err = p.decomposeSharding(values); err != nil {
-				logFailure(line, err, "couldn't decompose sharding changelog, skipping")
-				continue
-			}
-			if err = p.decomposeNamespace(values); err != nil {
-				logFailure(line, err, "couldn't decompose logline namespace, skipping")
-				continue
-			}
-			if err = p.decomposeLocks(values); err != nil {
-				logFailure(line, err, "couldn't decompose logline locks, skipping")
-				continue
-			}
-			if err = p.decomposeLocksMicros(values); err != nil {
-				logFailure(line, err, "couldn't decompose logline locks(micros), skipping")
-				continue
-			}
-
-			p.getCommandQuery(values)
-
-			if q, ok := values["query"].(map[string]interface{}); ok {
-				if _, ok = values["normalized_query"]; !ok {
-					// also calculate the query_shape if we can
-					values["normalized_query"] = queryshape.GetQueryShape(q)
+	wg := sync.WaitGroup{}
+	for i := 0; i < p.conf.NumParsers; i++ {
+		wg.Add(1)
+		go func(pNum int) {
+			for line := range lines {
+				// take care of any headers on the line
+				var prefixFields map[string]string
+				if prefixRegex != nil {
+					var prefix string
+					prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
+					line = strings.TrimPrefix(line, prefix)
 				}
-			}
+				values, err := p.lineParsers[pNum].ParseLogLine(line)
+				// we get a bunch of errors from the parser on mongo logs, skip em
+				if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
+					timestamp, err := p.parseTimestamp(values)
+					if err != nil {
+						logFailure(line, err, "couldn't parse logline timestamp, skipping")
+						continue
+					}
+					if err = p.decomposeSharding(values); err != nil {
+						logFailure(line, err, "couldn't decompose sharding changelog, skipping")
+						continue
+					}
+					if err = p.decomposeNamespace(values); err != nil {
+						logFailure(line, err, "couldn't decompose logline namespace, skipping")
+						continue
+					}
+					if err = p.decomposeLocks(values); err != nil {
+						logFailure(line, err, "couldn't decompose logline locks, skipping")
+						continue
+					}
+					if err = p.decomposeLocksMicros(values); err != nil {
+						logFailure(line, err, "couldn't decompose logline locks(micros), skipping")
+						continue
+					}
 
-			if ns, ok := values["namespace"].(string); ok && ns == "admin.$cmd" {
-				if cmdType, ok := values["command_type"]; ok && cmdType == "replSetHeartbeat" {
-					if cmd, ok := values["command"].(map[string]interface{}); ok {
-						if replicaSet, ok := cmd["replSetHeartbeat"].(string); ok {
-							p.currentReplicaSet = replicaSet
+					p.getCommandQuery(values)
+
+					if q, ok := values["query"].(map[string]interface{}); ok {
+						if _, ok = values["normalized_query"]; !ok {
+							// also calculate the query_shape if we can
+							values["normalized_query"] = queryshape.GetQueryShape(q)
 						}
 					}
+
+					if ns, ok := values["namespace"].(string); ok && ns == "admin.$cmd" {
+						if cmdType, ok := values["command_type"]; ok && cmdType == "replSetHeartbeat" {
+							if cmd, ok := values["command"].(map[string]interface{}); ok {
+								if replicaSet, ok := cmd["replSetHeartbeat"].(string); ok {
+									p.lock.Lock()
+									p.currentReplicaSet = replicaSet
+									p.lock.Unlock()
+								}
+							}
+						}
+					}
+
+					p.lock.RLock()
+					if p.currentReplicaSet != "" {
+						values["replica_set"] = p.currentReplicaSet
+					}
+					p.lock.RUnlock()
+
+					// merge the prefix fields and the parsed line contents
+					for k, v := range prefixFields {
+						values[k] = v
+					}
+
+					logrus.WithFields(logrus.Fields{
+						"line":   line,
+						"values": values,
+					}).Debug("Successfully parsed line")
+
+					// we'll be putting the timestamp in the Event
+					// itself, no need to also have it in the Data
+					delete(values, timestampFieldName)
+
+					send <- event.Event{
+						Timestamp: timestamp,
+						Data:      values,
+					}
+				} else {
+					logFailure(line, err, "logline didn't parse, skipping.")
 				}
 			}
-
-			if p.currentReplicaSet != "" {
-				values["replica_set"] = p.currentReplicaSet
-			}
-
-			// merge the prefix fields and the parsed line contents
-			for k, v := range prefixFields {
-				values[k] = v
-			}
-
-			logrus.WithFields(logrus.Fields{
-				"line":   line,
-				"values": values,
-			}).Debug("Successfully parsed line")
-
-			// we'll be putting the timestamp in the Event
-			// itself, no need to also have it in the Data
-			delete(values, timestampFieldName)
-
-			send <- event.Event{
-				Timestamp: timestamp,
-				Data:      values,
-			}
-		} else {
-			logFailure(line, err, "logline didn't parse, skipping.")
-		}
+			wg.Done()
+		}(i)
 	}
+	wg.Wait()
 	logrus.Debug("lines channel is closed, ending mongo processor")
 }
 

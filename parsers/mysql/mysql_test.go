@@ -466,11 +466,13 @@ var sqds = []slowQueryData{
 
 func TestHandleEvent(t *testing.T) {
 	p := &Parser{
-		nower:      &FakeNower{},
+		nower: &FakeNower{},
+	}
+	ptp := &perThreadParser{
 		normalizer: &normalizer.Parser{},
 	}
 	for i, sqd := range sqds {
-		res, timestamp := p.handleEvent(sqd.rawE)
+		res, timestamp := p.handleEvent(ptp, sqd.rawE)
 		if len(res) != len(sqd.sq) {
 			t.Errorf("case num %d: expected to parse %d fields, got %d", i, len(sqd.sq), len(res))
 			fmt.Printf("res is %+v\n", res)
@@ -491,6 +493,9 @@ func TestTimeProcessing(t *testing.T) {
 	p := &Parser{
 		nower: &FakeNower{},
 	}
+	ptp := &perThreadParser{
+		normalizer: &normalizer.Parser{},
+	}
 	tsts := []struct {
 		lines    []string
 		expected time.Time
@@ -510,7 +515,7 @@ func TestTimeProcessing(t *testing.T) {
 	}
 
 	for _, tt := range tsts {
-		_, timestamp := p.handleEvent(tt.lines)
+		_, timestamp := p.handleEvent(ptp, tt.lines)
 		if timestamp.Unix() != tt.expected.Unix() {
 			t.Errorf("Didn't capture unix ts from lines:\n%+v\n\tExpected: %d, Actual: %d",
 				strings.Join(tt.lines, "\n"), tt.expected.Unix(), timestamp.Unix())
@@ -714,8 +719,11 @@ func TestProcessLines(t *testing.T) {
 
 	for _, tt := range tsts {
 		p := &Parser{
-			nower:      &FakeNower{},
-			normalizer: &normalizer.Parser{},
+			conf: Options{
+				NumParsers: 5,
+			},
+			nower: &FakeNower{},
+			// normalizer: &normalizer.Parser{},
 		}
 		lines := make(chan string, 10)
 		send := make(chan event.Event, 5)
@@ -728,13 +736,18 @@ func TestProcessLines(t *testing.T) {
 		}
 		close(lines)
 
-		for _, exp := range tt.expected {
+		for range tt.expected {
 			ev := <-send
-			if !ev.Timestamp.Equal(exp.Timestamp) {
-				t.Errorf("time parsing mismatch. got %+v, expected %+v", ev.Timestamp, exp.Timestamp)
+			var found bool
+			// returned events may come out of order so just look for the event rather
+			// than expecting it to come in order
+			for _, exp := range tt.expected {
+				if ev.Timestamp.Equal(exp.Timestamp) && reflect.DeepEqual(ev.Data, exp.Data) {
+					found = true
+				}
 			}
-			if !reflect.DeepEqual(ev.Data, exp.Data) {
-				t.Errorf("data parsing mismatch. got %+v, expected %+v", ev.Data, exp.Data)
+			if !found {
+				t.Errorf("ev\n%+v\nnot found in expected list:\n%+v\n", ev, tt.expected)
 			}
 		}
 		if len(send) > 0 {
@@ -746,9 +759,12 @@ func TestProcessLines(t *testing.T) {
 	var numEvents int
 	for _, tt := range tsts {
 		p := &Parser{
+			conf: Options{
+				NumParsers: 5,
+			},
 			SampleRate: 3,
 			nower:      &FakeNower{},
-			normalizer: &normalizer.Parser{},
+			// normalizer: &normalizer.Parser{},
 		}
 		lines := make(chan string, 10)
 		send := make(chan event.Event, 5)

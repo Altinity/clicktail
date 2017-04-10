@@ -5,12 +5,15 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
 )
+
+const numParsers = 20
 
 const (
 	iso8601UTCTimeFormat   = "2006-01-02T15:04:05Z"
@@ -169,47 +172,55 @@ func (p *Parser) Init(options interface{}) error {
 
 // ProcessLines method for Parser.
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
-	for line := range lines {
+	wg := sync.WaitGroup{}
+	for i := 0; i < numParsers; i++ {
+		wg.Add(1)
+		go func() {
+			for line := range lines {
 
-		// take care of any headers on the line
-		var prefixFields map[string]string
-		if prefixRegex != nil {
-			var prefix string
-			prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
-			line = strings.TrimPrefix(line, prefix)
-		}
+				// take care of any headers on the line
+				var prefixFields map[string]string
+				if prefixRegex != nil {
+					var prefix string
+					prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
+					line = strings.TrimPrefix(line, prefix)
+				}
 
-		values, err := p.lineParser.ParseLogLine(line)
-		// we get a bunch of errors from the parser on ArangoDB logs, skip em
-		if err == nil {
-			timestamp, err := p.parseTimestamp(values)
-			if err != nil {
-				logSkipped(line, "couldn't parse logline timestamp, skipping")
-				continue
+				values, err := p.lineParser.ParseLogLine(line)
+				// we get a bunch of errors from the parser on ArangoDB logs, skip em
+				if err == nil {
+					timestamp, err := p.parseTimestamp(values)
+					if err != nil {
+						logSkipped(line, "couldn't parse logline timestamp, skipping")
+						continue
+					}
+
+					// merge the prefix fields and the parsed line contents
+					for k, v := range prefixFields {
+						values[k] = v
+					}
+
+					logrus.WithFields(logrus.Fields{
+						"line":   line,
+						"values": values,
+					}).Debug("Successfully parsed line")
+
+					// we'll be putting the timestamp in the Event
+					// itself, no need to also have it in the Data
+					delete(values, timestampFieldName)
+
+					send <- event.Event{
+						Timestamp: timestamp,
+						Data:      values,
+					}
+				} else {
+					logSkipped(line, "logline didn't parse, skipping.")
+				}
 			}
-
-			// merge the prefix fields and the parsed line contents
-			for k, v := range prefixFields {
-				values[k] = v
-			}
-
-			logrus.WithFields(logrus.Fields{
-				"line":   line,
-				"values": values,
-			}).Debug("Successfully parsed line")
-
-			// we'll be putting the timestamp in the Event
-			// itself, no need to also have it in the Data
-			delete(values, timestampFieldName)
-
-			send <- event.Event{
-				Timestamp: timestamp,
-				Data:      values,
-			}
-		} else {
-			logSkipped(line, "logline didn't parse, skipping.")
-		}
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 	logrus.Debug("lines channel is closed, ending arangodb processor")
 }
 
