@@ -23,6 +23,14 @@ Install from source:
 go get github.com/honeycombio/honeytail
 ```
 
+to install to a specific path:
+
+```
+GOPATH=/usr/local go get github.com/honeycombio/honeytail
+```
+
+the binary will install to `/usr/local/bin/honeytail`
+
 Use a prebuilt binary: find the latest version on [Honeycomb.io](https://honeycomb.io/docs/send-data/agent/)
 
 ## Usage
