@@ -2,7 +2,7 @@
 
 `honeytail` is [Honeycomb](https://honeycomb.io)'s agent for ingesting log file data into Honeycomb and making it available for exploration. Its favorite format is **JSON**, but understands how to parse a range of other well-known log formats.
 
-See [our documentation](https://honeycomb.io/docs/send-data/agent/) to read about how to configure and run `honeytail`, to find tip and best practices, and to download prebuilt versions.
+See [our documentation](https://honeycomb.io/docs/send-data/agent/) to read about how to configure and run `honeytail`, to find tips and best practices, and to download prebuilt versions.
 
 ## Supported Parsers
 
