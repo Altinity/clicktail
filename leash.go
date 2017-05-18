@@ -31,6 +31,8 @@ import (
 func run(options GlobalOptions) {
 	logrus.Info("Starting honeytail")
 
+	stats := newResponseStats()
+
 	sigs := make(chan os.Signal, 1)
 	abort := make(chan struct{})
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -106,6 +108,7 @@ func run(options GlobalOptions) {
 
 	// for each channel we got back from tail.GetEntries, spin up a parser.
 	parsersWG := sync.WaitGroup{}
+	responsesWG := sync.WaitGroup{}
 	for _, lines := range linesChans {
 		// get our parser
 		parser, opts := getParserAndOptions(options)
@@ -155,7 +158,11 @@ func run(options GlobalOptions) {
 
 		// start a goroutine that reads from responses and logs.
 		responses := libhoney.Responses()
-		go handleResponses(responses, toBeResent, delaySending, options)
+		responsesWG.Add(1)
+		go func() {
+			handleResponses(responses, stats, toBeResent, delaySending, options)
+			responsesWG.Done()
+		}()
 
 		parsersWG.Add(1)
 		go func(plines chan string) {
@@ -171,6 +178,10 @@ func run(options GlobalOptions) {
 	parsersWG.Wait()
 	// tell libhoney to finish up sending events
 	libhoney.Close()
+	// print out what we've done one last time
+	responsesWG.Wait()
+	stats.log()
+	stats.logFinal()
 
 	// Nothing bad happened, yay
 	logrus.Info("Honeytail is all done, goodbye!")
@@ -411,10 +422,9 @@ func sendEvent(ev event.Event) {
 
 // handleResponses reads from the response queue, logging a summary and debug
 // re-enqueues any events that failed to send in a retryable way
-func handleResponses(responses chan libhoney.Response,
+func handleResponses(responses chan libhoney.Response, stats *responseStats,
 	toBeResent chan event.Event, delaySending chan int,
 	options GlobalOptions) {
-	stats := newResponseStats()
 	go logStats(stats, options.StatusInterval)
 
 	for rsp := range responses {

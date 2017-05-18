@@ -27,11 +27,15 @@ type responseStats struct {
 	sumDuration time.Duration
 	minDuration time.Duration
 	event       *event.Event
+
+	totalCount       int
+	totalStatusCodes map[int]int
 }
 
 // newResponseStats initializes the struct's complex data types
 func newResponseStats() *responseStats {
 	r := &responseStats{}
+	r.totalStatusCodes = make(map[int]int)
 	r.lock = &sync.Mutex{}
 	r.reset()
 	return r
@@ -82,7 +86,8 @@ func (r *responseStats) log() {
 		avg = 0
 	}
 	logrus.WithFields(logrus.Fields{
-		"total":            r.count,
+		"count":            r.count,
+		"lifetime_count":   r.totalCount + r.count,
 		"slowest":          r.maxDuration,
 		"fastest":          r.minDuration,
 		"avg_duration":     avg,
@@ -97,9 +102,25 @@ func (r *responseStats) log() {
 	}
 }
 
+// log the total count on its own
+func (r *responseStats) logFinal() {
+	r.totalCount += r.count
+	for code, count := range r.statusCodes {
+		r.totalStatusCodes[code] += count
+	}
+	logrus.WithFields(logrus.Fields{
+		"total attempted sends":               r.totalCount,
+		"number sent by response status code": r.totalStatusCodes,
+	}).Info("Total number of events sent")
+}
+
 // reset the counters to zero.
 // NOT thread safe
 func (r *responseStats) reset() {
+	r.totalCount += r.count
+	for code, count := range r.statusCodes {
+		r.totalStatusCodes[code] += count
+	}
 	r.count = 0
 	r.statusCodes = make(map[int]int)
 	r.bodies = make(map[string]int)
