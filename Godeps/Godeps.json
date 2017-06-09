@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/honeycombio/honeytail",
 	"GoVersion": "go1.8",
-	"GodepVersion": "v74",
+	"GodepVersion": "v79",
 	"Deps": [
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
@@ -24,6 +24,10 @@
 			"ImportPath": "github.com/go-sql-driver/mysql",
 			"Comment": "v1.2-191-g1421caf",
 			"Rev": "1421caf44f6464fd2ee8de694c7508ee13f92964"
+		},
+		{
+			"ImportPath": "github.com/honeycombio/dynsampler-go",
+			"Rev": "44cb4cd4501fbefa77f027bd885195146a3e322a"
 		},
 		{
 			"ImportPath": "github.com/honeycombio/gonx",

@@ -64,6 +64,9 @@ type GlobalOptions struct {
 	RequestQueryKeys  []string `long:"request_query_keys" description:"Request query parameter key names to extract, when request_parse_query is 'whitelist'. May be specified multiple times."`
 	BackOff           bool     `long:"backoff" description:"When rate limited by the API, back off and retry sending failed events. Otherwise failed events are dropped. When --backfill is set, it will override this option=true"`
 	PrefixRegex       string   `long:"log_prefix" description:"pass a regex to this flag to strip the matching prefix from the line before handing to the parser. Useful when log aggregation prepends a line header. Use named groups to extract fields into the event."`
+	DynSample         []string `long:"dynsampling" description:"enable dynamic sampling using the field listed in this option. May be specified multiple times; fields will be concatenated to form the dynsample key. WARNING increases CPU utilization dramatically over normal sampling"`
+	DynWindowSec      int      `long:"dynsample_window" description:"measurement window size for the dynsampler, in seconds" default:"30"`
+	GoalSampleRate    int      `hidden:"true" description:"used to hold the desired sample rate and set tailing sample rate to 1"`
 
 	Reqs  RequiredOptions `group:"Required Options"`
 	Modes OtherModes      `group:"Other Modes"`
@@ -98,7 +101,7 @@ type OtherModes struct {
 func main() {
 	var options GlobalOptions
 	flagParser := flag.NewParser(&options, flag.PrintErrors)
-	flagParser.Usage = "-p <parser> -k <writekey> -f </path/to/logfile> -d <mydata> [optional arguments]"
+	flagParser.Usage = "-p <parser> -k <writekey> -f </path/to/logfile> -d <mydata> [optional arguments]\n\nSee https://honeycomb.io/docs/connect/agent/ for more detailed usage instructions."
 
 	if extraArgs, err := flagParser.Parse(); err != nil || len(extraArgs) != 0 {
 		fmt.Println("Error: failed to parse the command line.")
@@ -204,6 +207,13 @@ func addParserDefaultOptions(options *GlobalOptions) {
 	} else {
 		options.TailSample = false
 	}
+	if len(options.DynSample) != 0 {
+		// when using dynamic sampling, we make the sampling decision after parsing
+		// the content, so we must not tailsample.
+		options.TailSample = false
+		options.GoalSampleRate = int(options.SampleRate)
+		options.SampleRate = 1
+	}
 }
 
 func sanityCheckOptions(options *GlobalOptions) {
@@ -234,6 +244,10 @@ func sanityCheckOptions(options *GlobalOptions) {
 		os.Exit(1)
 	case options.RequestParseQuery != "whitelist" && options.RequestParseQuery != "all":
 		fmt.Println("request_parse_query flag must be either 'whitelist' or 'all'.")
+		usage()
+		os.Exit(1)
+	case len(options.DynSample) != 0 && options.SampleRate <= 1 && options.GoalSampleRate <= 1:
+		fmt.Println("sample rate flag must be set >= 2 when dynamic sampling is enabled")
 		usage()
 		os.Exit(1)
 	}

@@ -392,8 +392,9 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 					sq[roleKey] = *p.role
 				}
 				send <- event.Event{
-					Timestamp: timestamp,
-					Data:      sq,
+					Timestamp:  timestamp,
+					SampleRate: p.SampleRate,
+					Data:       sq,
 				}
 			}
 			wg.Done()
