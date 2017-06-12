@@ -131,6 +131,18 @@ var tts = []testTimestamp{
 		fieldName: "time",
 		expected:  time.Unix(1397113200, 0),
 	},
+	{
+		format:    "%Y/%m/%d %H:%M:%S.%f %z",
+		fieldName: "timestamp",
+		input:     "2014/04/10 20:57:38.777456 -0700",
+		expected:  time.Unix(1397188658, 777456000).UTC(),
+	},
+	{
+		format:    "%Y/%m/%d %H:%M:%S.%f%z",
+		fieldName: "timestamp",
+		input:     "2014/04/10 20:57:38.789-0700",
+		expected:  time.Unix(1397188658, 789000000),
+	},
 }
 
 func TestGetTimestampValid(t *testing.T) {

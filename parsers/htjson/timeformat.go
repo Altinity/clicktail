@@ -20,6 +20,7 @@ var (
 		"%D": "01/02/06",
 		"%e": "_2",
 		"%E": "", // modifiers not supported
+		"%f": "999",
 		"%F": "2006-01-02",
 		"%G": "", // week-based year not supported
 		"%g": "", // week-based year not supported
