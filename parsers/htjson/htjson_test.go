@@ -36,9 +36,10 @@ var tlms = []testLineMap{
 		},
 	},
 	{ // non-flat json object
-		input: `{"array": [3, 4, 6], "myfloat": 4.234}`,
+		input: `{"array": [3, 4, 6], "obj": {"subkey":"subval"}, "myfloat": 4.234}`,
 		expected: map[string]interface{}{
-			"array":   "[3,4,6]",
+			"array":   []interface{}{float64(3), float64(4), float64(6)},
+			"obj":     map[string]interface{}{"subkey": "subval"},
 			"myfloat": 4.234,
 		},
 	},

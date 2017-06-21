@@ -62,28 +62,13 @@ type LineParser interface {
 type JSONLineParser struct {
 }
 
-// LineParser will do a complete JSON decode of the line,
-// but then re-encode any value that's not a string as JSON and return
-// it as a string. We don't want nested objects, but it seems silly to
-// balk instead of just pushing json as the value into retriever.
+// ParseLine will unmarshal the thing it read in to detect errors in the JSON
+// (by failing to parse) and give us an object that can be mutated by the
+// various filters honeytail might apply.
 func (j *JSONLineParser) ParseLine(line string) (map[string]interface{}, error) {
 	parsed := make(map[string]interface{})
 	err := json.Unmarshal([]byte(line), &parsed)
-	if err != nil {
-		return nil, err
-	}
-	processed := make(map[string]interface{})
-	for k, v := range parsed {
-		switch typedVal := v.(type) {
-		case bool, string, float64:
-			processed[k] = typedVal
-		default:
-			rejsoned, _ := json.Marshal(v)
-			processed[k] = string(rejsoned)
-
-		}
-	}
-	return processed, err
+	return parsed, err
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
