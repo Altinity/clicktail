@@ -60,7 +60,7 @@ type State struct {
 
 // GetSampledEntries wraps GetEntries and returns a list of channels that
 // provide sampled entries
-func GetSampledEntries(conf Config, sampleRate uint, abort chan struct{}) ([]chan string, error) {
+func GetSampledEntries(conf Config, sampleRate uint, abort <-chan struct{}) ([]chan string, error) {
 	unsampledLinesChans, err := GetEntries(conf, abort)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func shouldDrop(rate uint) bool {
 
 // GetEntries sets up a list of channels that get one line at a time from each
 // file down each channel.
-func GetEntries(conf Config, abort chan struct{}) ([]chan string, error) {
+func GetEntries(conf Config, abort <-chan struct{}) ([]chan string, error) {
 	if conf.Type != RotateStyleSyslog {
 		return nil, errors.New("Only Syslog style rotation currently supported")
 	}
@@ -168,7 +168,7 @@ func removeStateFiles(files []string, conf Config) []string {
 	return newFiles
 }
 
-func tailSingleFile(tailer *tail.Tail, file string, stateFile string, abort chan struct{}) chan string {
+func tailSingleFile(tailer *tail.Tail, file string, stateFile string, abort <-chan struct{}) chan string {
 	lines := make(chan string)
 	// TODO report some metric to indicate whether we're keeping up with the
 	// front of the file, of if it's being written faster than we can send
@@ -219,7 +219,7 @@ func tailSingleFile(tailer *tail.Tail, file string, stateFile string, abort chan
 
 // tailStdIn is a special case to tail STDIN without any of the
 // fancy stuff that the tail module provides
-func tailStdIn(abort chan struct{}) chan string {
+func tailStdIn(abort <-chan struct{}) chan string {
 	lines := make(chan string)
 	input := bufio.NewReader(os.Stdin)
 	go func() {
