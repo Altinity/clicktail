@@ -1,13 +1,13 @@
 package nginx
 
 import (
-	"errors"
 	"log"
 	"reflect"
 	"regexp"
 	"testing"
 	"time"
 
+	"github.com/honeycombio/gonx"
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/httime/httimetest"
@@ -25,22 +25,7 @@ func init() {
 type testLineMaps struct {
 	line        string
 	trimmedLine string
-	resp        map[string]string
-	typedResp   map[string]interface{}
 	ev          event.Event
-}
-
-type FakeLineParser struct {
-	tlm []testLineMaps
-}
-
-func (f *FakeLineParser) ParseLine(line string) (map[string]string, error) {
-	for _, pair := range f.tlm {
-		if pair.trimmedLine == line {
-			return pair.resp, nil
-		}
-	}
-	return nil, errors.New("failed to parse line")
 }
 
 func TestProcessLines(t *testing.T) {
@@ -50,25 +35,6 @@ func TestProcessLines(t *testing.T) {
 		{
 			line:        "Nov 05 10:23:45 myhost: https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
 			trimmedLine: "https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
-			resp: map[string]string{
-				"http_x_forwarded_proto": "https",
-				"remote_addr":            "10.252.4.24",
-				"remote_user":            "-",
-				"time_local":             "08/Oct/2015:00:26:26 +0000",
-				"status":                 "200",
-				"body_bytes_sent":        "174",
-				"request_time":           "0.099",
-			},
-			typedResp: map[string]interface{}{
-				"pre_hostname":           "myhost",
-				"http_x_forwarded_proto": "https",
-				"remote_addr":            "10.252.4.24",
-				"remote_user":            "-",
-				"time_local":             "08/Oct/2015:00:26:26 +0000",
-				"status":                 200,
-				"body_bytes_sent":        174,
-				"request_time":           0.099,
-			},
 			ev: event.Event{
 				Timestamp: t1,
 				Data: map[string]interface{}{
@@ -86,8 +52,8 @@ func TestProcessLines(t *testing.T) {
 		conf: Options{
 			NumParsers: 5,
 		},
-		lineParser: &FakeLineParser{
-			tlm: tlm,
+		lineParser: &GonxLineParser{
+			parser: gonx.NewParser("$http_x_forwarded_proto - $remote_addr - $remote_user [$time_local] $status $body_bytes_sent $request_time"),
 		},
 	}
 	lines := make(chan string)
@@ -113,24 +79,6 @@ func TestProcessLinesNoPreReg(t *testing.T) {
 		{
 			line:        "https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
 			trimmedLine: "https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
-			resp: map[string]string{
-				"http_x_forwarded_proto": "https",
-				"remote_addr":            "10.252.4.24",
-				"remote_user":            "-",
-				"time_local":             "08/Oct/2015:00:26:26 +0000",
-				"status":                 "200",
-				"body_bytes_sent":        "174",
-				"request_time":           "0.099",
-			},
-			typedResp: map[string]interface{}{
-				"http_x_forwarded_proto": "https",
-				"remote_addr":            "10.252.4.24",
-				"remote_user":            "-",
-				"time_local":             "08/Oct/2015:00:26:26 +0000",
-				"status":                 200,
-				"body_bytes_sent":        174,
-				"request_time":           0.099,
-			},
 			ev: event.Event{
 				Timestamp: t1,
 				Data: map[string]interface{}{
@@ -147,8 +95,8 @@ func TestProcessLinesNoPreReg(t *testing.T) {
 		conf: Options{
 			NumParsers: 5,
 		},
-		lineParser: &FakeLineParser{
-			tlm: tlm,
+		lineParser: &GonxLineParser{
+			parser: gonx.NewParser("$http_x_forwarded_proto - $remote_addr - $remote_user [$time_local] $status $body_bytes_sent $request_time"),
 		},
 	}
 	lines := make(chan string)
@@ -194,7 +142,7 @@ func TestTypeifyParsedLine(t *testing.T) {
 			"negint": int64(-5),
 		},
 	}
-	res, _ := typeifyParsedLine(tc.untyped)
+	res := typeifyParsedLine(tc.untyped)
 	if !reflect.DeepEqual(res, tc.typed) {
 		t.Fatalf("Comparison failed. Expected: %v, Actual: %v", tc.typed, res)
 	}

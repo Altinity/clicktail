@@ -14,3 +14,7 @@ type Parser interface {
 	// line prior to parsing. Any named groups will be added to the event.
 	ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *ExtRegexp)
 }
+
+type LineParser interface {
+	ParseLine(line string) (map[string]interface{}, error)
+}

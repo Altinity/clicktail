@@ -47,12 +47,7 @@ type Options struct {
 // Parser for log lines.
 type Parser struct {
 	conf       Options
-	lineParser LineParser
-}
-
-// LineParser interface to parse a line of a log file.
-type LineParser interface {
-	ParseLogLine(line string) (map[string]interface{}, error)
+	lineParser parsers.LineParser
 }
 
 // ArangoLineParser is a LineParser for ArangoDB log files.
@@ -100,8 +95,8 @@ func removeQuotes(word string) string {
 	return word
 }
 
-// ParseLogLine method for an ArangoLineParser implementing LineParser.
-func (m *ArangoLineParser) ParseLogLine(line string) (_ map[string]interface{}, err error) {
+// ParseLine method for an ArangoLineParser implementing LineParser.
+func (m *ArangoLineParser) ParseLine(line string) (_ map[string]interface{}, err error) {
 	// Do the actual work here, we look for log lines in the log topic "requests",
 	// there are two types, one is a DEBUG line (could be switched off) containing
 	// the request body, the other is the INFO line marking the end of the
@@ -187,7 +182,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					line = strings.TrimPrefix(line, prefix)
 				}
 
-				values, err := p.lineParser.ParseLogLine(line)
+				values, err := p.lineParser.ParseLine(line)
 				// we get a bunch of errors from the parser on ArangoDB logs, skip em
 				if err == nil {
 					timestamp, err := p.parseTimestamp(values)

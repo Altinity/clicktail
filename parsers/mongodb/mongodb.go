@@ -55,26 +55,22 @@ type Options struct {
 
 type Parser struct {
 	conf        Options
-	lineParsers []LineParser
+	lineParsers []parsers.LineParser
 
 	lock              sync.RWMutex
 	currentReplicaSet string
 }
 
-type LineParser interface {
-	ParseLogLine(line string) (map[string]interface{}, error)
-}
-
 type MongoLineParser struct {
 }
 
-func (m *MongoLineParser) ParseLogLine(line string) (map[string]interface{}, error) {
+func (m *MongoLineParser) ParseLine(line string) (map[string]interface{}, error) {
 	return logparser.ParseLogLine(line)
 }
 
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
-	p.lineParsers = make([]LineParser, p.conf.NumParsers)
+	p.lineParsers = make([]parsers.LineParser, p.conf.NumParsers)
 	for i := 0; i < p.conf.NumParsers; i++ {
 		p.lineParsers[i] = &MongoLineParser{}
 	}
@@ -94,7 +90,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
 					line = strings.TrimPrefix(line, prefix)
 				}
-				values, err := p.lineParsers[pNum].ParseLogLine(line)
+				values, err := p.lineParsers[pNum].ParseLine(line)
 				// we get a bunch of errors from the parser on mongo logs, skip em
 				if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
 					timestamp, err := p.parseTimestamp(values)

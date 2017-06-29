@@ -32,7 +32,7 @@ type Options struct {
 
 type Parser struct {
 	conf       Options
-	lineParser LineParser
+	lineParser parsers.LineParser
 }
 
 func (n *Parser) Init(options interface{}) error {
@@ -57,15 +57,11 @@ func (n *Parser) Init(options interface{}) error {
 	return nil
 }
 
-type LineParser interface {
-	ParseLine(line string) (map[string]string, error)
-}
-
 type GonxLineParser struct {
 	parser *gonx.Parser
 }
 
-func (g *GonxLineParser) ParseLine(line string) (map[string]string, error) {
+func (g *GonxLineParser) ParseLine(line string) (map[string]interface{}, error) {
 	gonxEvent, err := g.parser.ParseString(line)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
@@ -73,7 +69,7 @@ func (g *GonxLineParser) ParseLine(line string) (map[string]string, error) {
 		}).Debug("failed to parse nginx log line")
 		return nil, err
 	}
-	return gonxEvent.Fields, nil
+	return typeifyParsedLine(gonxEvent.Fields), nil
 }
 
 func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
@@ -88,11 +84,12 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				}).Debug("Attempting to process nginx log line")
 
 				// take care of any headers on the line
-				var prefixFields map[string]string
+				var prefixFields map[string]interface{}
 				if prefixRegex != nil {
 					var prefix string
-					prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
+					prefix, fields := prefixRegex.FindStringSubmatchMap(line)
 					line = strings.TrimPrefix(line, prefix)
+					prefixFields = typeifyParsedLine(fields)
 				}
 
 				parsedLine, err := n.lineParser.ParseLine(line)
@@ -103,20 +100,11 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				for k, v := range prefixFields {
 					parsedLine[k] = v
 				}
-				// typedEvent, err := typeifyEvent(nginxEvent)
-				typedEvent, err := typeifyParsedLine(parsedLine)
-				if err != nil {
-					logrus.WithFields(logrus.Fields{
-						"line":  line,
-						"event": parsedLine,
-					}).Debug("failed to typeify event")
-					continue
-				}
-				timestamp := n.getTimestamp(typedEvent)
+				timestamp := n.getTimestamp(parsedLine)
 
 				e := event.Event{
 					Timestamp: timestamp,
-					Data:      typedEvent,
+					Data:      parsedLine,
 				}
 				send <- e
 			}
@@ -128,7 +116,7 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 }
 
 // typeifyParsedLine attempts to cast numbers in the event to floats or ints
-func typeifyParsedLine(pl map[string]string) (map[string]interface{}, error) {
+func typeifyParsedLine(pl map[string]string) map[string]interface{} {
 	// try to convert numbers, if possible
 	msi := make(map[string]interface{}, len(pl))
 	for k, v := range pl {
@@ -151,7 +139,7 @@ func typeifyParsedLine(pl map[string]string) (map[string]interface{}, error) {
 		}
 		msi[k] = v
 	}
-	return msi, nil
+	return msi
 }
 
 // tries to extract a timestamp from the log line
