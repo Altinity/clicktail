@@ -263,6 +263,7 @@ func modifyEventContents(toBeSent chan event.Event, options GlobalOptions) chan 
 		sampler = &dynsampler.AvgSampleWithMin{
 			GoalSampleRate:    options.GoalSampleRate,
 			ClearFrequencySec: options.DynWindowSec,
+			MinEventsPerSec:   options.MinSampleRate,
 		}
 		if err := sampler.Start(); err != nil {
 			logrus.WithField("error", err).Fatal("dynsampler failed to start")
