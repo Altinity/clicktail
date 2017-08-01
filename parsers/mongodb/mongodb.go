@@ -12,6 +12,7 @@ import (
 	queryshape "github.com/honeycombio/mongodbtools/queryshape"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
 )
 
@@ -55,7 +56,6 @@ type Options struct {
 type Parser struct {
 	conf        Options
 	lineParsers []LineParser
-	nower       Nower
 
 	lock              sync.RWMutex
 	currentReplicaSet string
@@ -74,7 +74,6 @@ func (m *MongoLineParser) ParseLogLine(line string) (map[string]interface{}, err
 
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
-	p.nower = &RealNower{}
 	p.lineParsers = make([]LineParser, p.conf.NumParsers)
 	for i := 0; i < p.conf.NumParsers; i++ {
 		p.lineParsers[i] = &MongoLineParser{}
@@ -177,7 +176,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 }
 
 func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error) {
-	now := p.nower.Now()
+	now := httime.Now()
 	timestamp_value, ok := values[timestampFieldName].(string)
 	if ok {
 		var err error
@@ -416,14 +415,4 @@ func (p *Parser) getCommandQuery(values map[string]interface{}) {
 
 func logFailure(line string, err error, msg string) {
 	logrus.WithFields(logrus.Fields{"line": line}).WithError(err).Debugln(msg)
-}
-
-type Nower interface {
-	Now() time.Time
-}
-
-type RealNower struct{}
-
-func (r *RealNower) Now() time.Time {
-	return time.Now().UTC()
 }

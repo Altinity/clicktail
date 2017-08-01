@@ -2,14 +2,25 @@ package nginx
 
 import (
 	"errors"
+	"log"
 	"reflect"
 	"regexp"
 	"testing"
 	"time"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/httime"
+	"github.com/honeycombio/honeytail/httime/httimetest"
 	"github.com/honeycombio/honeytail/parsers"
 )
+
+func init() {
+	fakeNow, err := time.Parse(commonLogFormatTimeLayout, "02/Jan/2010:12:34:56 -0000")
+	if err != nil {
+		log.Fatal(err)
+	}
+	httime.DefaultNower = &httimetest.FakeNower{fakeNow}
+}
 
 type testLineMaps struct {
 	line        string
@@ -189,22 +200,22 @@ func TestTypeifyParsedLine(t *testing.T) {
 	}
 }
 
-type FakeNower struct{}
-
-func (f *FakeNower) Now() time.Time {
-	fakeTime, _ := time.Parse(commonLogFormatTimeLayout, "02/Jan/2010:12:34:56 -0000")
-	return fakeTime
-}
-
 func TestGetTimestamp(t *testing.T) {
 	t1, _ := time.Parse(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 +0000")
 	t2, _ := time.Parse(commonLogFormatTimeLayout, "02/Jan/2010:12:34:56 -0000")
+	userDefinedTimeFormat := "2006-01-02T15:04:05.9999Z"
+	exampleCustomFormatTimestamp := "2017-07-31T20:40:57.980264Z"
+	t3, _ := time.Parse(userDefinedTimeFormat, exampleCustomFormatTimestamp)
 	testCases := []struct {
+		desc      string
+		conf      Options
 		input     map[string]interface{}
 		postMunge map[string]interface{}
 		retval    time.Time
 	}{
-		{ //well formatted time_local
+		{
+			desc: "well formatted time_local",
+			conf: Options{},
 			input: map[string]interface{}{
 				"foo":        "bar",
 				"time_local": "08/Oct/2015:00:26:26 +0000",
@@ -214,7 +225,9 @@ func TestGetTimestamp(t *testing.T) {
 			},
 			retval: t1,
 		},
-		{ //well formatted time_iso
+		{
+			desc: "well formatted time_iso",
+			conf: Options{},
 			input: map[string]interface{}{
 				"foo":          "bar",
 				"time_iso8601": "2015-10-08T00:26:26-00:00",
@@ -224,7 +237,9 @@ func TestGetTimestamp(t *testing.T) {
 			},
 			retval: t1,
 		},
-		{ //broken formatted time_local
+		{
+			desc: "broken formatted time_local",
+			conf: Options{},
 			input: map[string]interface{}{
 				"foo":        "bar",
 				"time_local": "08aoeu00:26:26 +0000",
@@ -234,7 +249,9 @@ func TestGetTimestamp(t *testing.T) {
 			},
 			retval: t2,
 		},
-		{ //broken formatted time_iso
+		{
+			desc: "broken formatted time_iso",
+			conf: Options{},
 			input: map[string]interface{}{
 				"foo":          "bar",
 				"time_iso8601": "2015-aoeu00:00",
@@ -244,7 +261,9 @@ func TestGetTimestamp(t *testing.T) {
 			},
 			retval: t2,
 		},
-		{ //non-string formatted time_local
+		{
+			desc: "non-string formatted time_local",
+			conf: Options{},
 			input: map[string]interface{}{
 				"foo":        "bar",
 				"time_local": 1234,
@@ -254,7 +273,9 @@ func TestGetTimestamp(t *testing.T) {
 			},
 			retval: t2,
 		},
-		{ //non-string formatted time_iso
+		{
+			desc: "non-string formatted time_iso",
+			conf: Options{},
 			input: map[string]interface{}{
 				"foo":          "bar",
 				"time_iso8601": 1234,
@@ -264,7 +285,9 @@ func TestGetTimestamp(t *testing.T) {
 			},
 			retval: t2,
 		},
-		{ //missing time field
+		{
+			desc: "missing time field",
+			conf: Options{},
 			input: map[string]interface{}{
 				"foo": "bar",
 			},
@@ -273,14 +296,33 @@ func TestGetTimestamp(t *testing.T) {
 			},
 			retval: t2,
 		},
+		{
+			desc: "timestamp in user-defined format",
+			conf: Options{
+				TimeFieldFormat: userDefinedTimeFormat,
+				TimeFieldName:   "timestamp",
+			},
+			input: map[string]interface{}{
+				"foo":       "bar",
+				"timestamp": exampleCustomFormatTimestamp,
+			},
+			postMunge: map[string]interface{}{
+				"foo": "bar",
+			},
+			retval: t3,
+		},
 	}
+
 	for _, tc := range testCases {
-		res := getTimestamp(&FakeNower{}, tc.input)
+		parser := &Parser{
+			conf: tc.conf,
+		}
+		res := parser.getTimestamp(tc.input)
 		if !reflect.DeepEqual(tc.input, tc.postMunge) {
-			t.Errorf("didn't remove time field: %v", tc.input)
+			t.Errorf("didn't remove time field in %q: %v", tc.desc, tc.input)
 		}
 		if !reflect.DeepEqual(res, tc.retval) {
-			t.Errorf("got wrong time. expected %v got %v", tc.retval, res)
+			t.Errorf("got wrong time in %q. expected %v got %v", tc.desc, tc.retval, res)
 		}
 	}
 }

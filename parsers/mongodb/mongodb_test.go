@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/httime"
+	"github.com/honeycombio/honeytail/httime/httimetest"
 )
 
 const (
@@ -51,6 +53,11 @@ var (
 	DELETE_COMMAND_TIME, _         = time.Parse(ctimeTimeFormat, "Tue Sep 13 21:10:33.961")
 )
 
+func init() {
+	fakeNow, _ := time.Parse(iso8601UTCTimeFormat, "2010-10-02T12:34:56.000Z")
+	httime.DefaultNower = &httimetest.FakeNower{fakeNow}
+}
+
 type processed struct {
 	time        time.Time
 	includeData map[string]interface{}
@@ -58,7 +65,6 @@ type processed struct {
 }
 
 func TestProcessLines(t *testing.T) {
-	nower := &FakeNower{}
 	locks_string1 := "locks:{ Global: { acquireCount: { r: 2, w: 2 } }, Database: { acquireCount: { w: 2 } }, Collection: { acquireCount: { w: 1 } }, oplog: { acquireCount: { w: 1 } } }"
 	tlm := []struct {
 		line     string
@@ -247,7 +253,7 @@ func TestProcessLines(t *testing.T) {
 		{
 			line: HEARTBEAT,
 			expected: processed{
-				time: HEARTBEAT_TIME.AddDate(nower.Now().Year(), 0, 0),
+				time: HEARTBEAT_TIME.AddDate(httime.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
 					"command_type": "replSetHeartbeat",
 					"replica_set":  "replica-set-here",
@@ -258,7 +264,7 @@ func TestProcessLines(t *testing.T) {
 		{
 			line: UBUNTU_2_4_FIND,
 			expected: processed{
-				time: UBUNTU_2_4_FIND_TIME.AddDate(nower.Now().Year(), 0, 0),
+				time: UBUNTU_2_4_FIND_TIME.AddDate(httime.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
 					"operation":         "query",
 					"read_lock_held_us": int64(60),
@@ -371,7 +377,7 @@ func TestProcessLines(t *testing.T) {
 		{
 			line: UPDATE_SIMPLE_COMMAND,
 			expected: processed{
-				time: UPDATE_COMMAND_TIME.AddDate(nower.Now().Year(), 0, 0),
+				time: UPDATE_COMMAND_TIME.AddDate(httime.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
 					"normalized_query": `{ "updates": [ { "$query": { "mood": 1 }, "$update": { "$set": { "mood": 1 } } } ] }`,
 				},
@@ -381,7 +387,7 @@ func TestProcessLines(t *testing.T) {
 		{
 			line: UPDATE_COMMAND,
 			expected: processed{
-				time: UPDATE_COMMAND_TIME.AddDate(nower.Now().Year(), 0, 0),
+				time: UPDATE_COMMAND_TIME.AddDate(httime.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
 					"normalized_query": `{ "updates": [ { "$query": { "hulkForm": 1 }, "$update": { "$set": { "hulkForm": 1 }, "$setOnInsert": { "hulkForm": 1 } } } ] }`,
 				},
@@ -391,7 +397,7 @@ func TestProcessLines(t *testing.T) {
 		{
 			line: DELETE_SIMPLE_COMMAND,
 			expected: processed{
-				time: DELETE_COMMAND_TIME.AddDate(nower.Now().Year(), 0, 0),
+				time: DELETE_COMMAND_TIME.AddDate(httime.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
 					"normalized_query": `{ "deletes": [ { "$query": { "mood": 1 } } ] }`,
 				},
@@ -401,7 +407,7 @@ func TestProcessLines(t *testing.T) {
 		{
 			line: DELETE_COMMAND,
 			expected: processed{
-				time: DELETE_COMMAND_TIME.AddDate(nower.Now().Year(), 0, 0),
+				time: DELETE_COMMAND_TIME.AddDate(httime.Now().Year(), 0, 0),
 				includeData: map[string]interface{}{
 					"normalized_query": `{ "deletes": [ { "$limit": 1, "$query": { "hulkForm": 1, "issue": { "$ne": 1 } } } ] }`,
 				},
@@ -413,7 +419,6 @@ func TestProcessLines(t *testing.T) {
 		conf: Options{
 			NumParsers: 5,
 		},
-		nower: nower,
 	}
 	m.lineParsers = make([]LineParser, m.conf.NumParsers)
 	for i := 0; i < m.conf.NumParsers; i++ {
@@ -461,11 +466,4 @@ func TestProcessLines(t *testing.T) {
 		}
 		found = false
 	}
-}
-
-type FakeNower struct{}
-
-func (f *FakeNower) Now() time.Time {
-	fakeTime, _ := time.Parse(iso8601UTCTimeFormat, "2010-10-02T12:34:56.000Z")
-	return fakeTime
 }

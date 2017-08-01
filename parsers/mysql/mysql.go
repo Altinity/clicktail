@@ -16,6 +16,7 @@ import (
 	"github.com/honeycombio/mysqltools/query/normalizer"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
 )
 
@@ -139,7 +140,6 @@ type Parser struct {
 
 	conf       Options
 	wg         sync.WaitGroup
-	nower      Nower
 	hostedOn   string
 	readOnly   *bool
 	replicaLag *int64
@@ -151,19 +151,8 @@ type perThreadParser struct {
 	normalizer *normalizer.Parser
 }
 
-type Nower interface {
-	Now() time.Time
-}
-
-type RealNower struct{}
-
-func (n *RealNower) Now() time.Time {
-	return time.Now().UTC()
-}
-
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
-	p.nower = &RealNower{}
 	if p.conf.Host != "" {
 		url := fmt.Sprintf("%s:%s@tcp(%s)/", p.conf.User, p.conf.Pass, p.conf.Host)
 		db, err := sql.Open("mysql", url)
@@ -410,9 +399,14 @@ func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event
 func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 	map[string]interface{}, time.Time) {
 	sq := map[string]interface{}{}
-	var timeFromComment time.Time
-	var timeFromSet int64
-	query := ""
+	if len(rawE) == 0 {
+		return sq, time.Time{}
+	}
+	var (
+		timeFromComment time.Time
+		timeFromSet     int64
+		query           = ""
+	)
 	for _, line := range rawE {
 		// parse each line and populate the map of attributes
 		if _, mg := reTime.FindStringSubmatchMap(line); mg != nil {
@@ -541,7 +535,7 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 	//
 	// In the best case (we have both), we combine the two; in the worst case (we
 	//   have neither) we fall back to "now."
-	combinedTime := p.nower.Now()
+	combinedTime := httime.Now()
 	if !timeFromComment.IsZero() && timeFromSet > 0 {
 		nanos := time.Duration(timeFromComment.Nanosecond())
 		combinedTime = time.Unix(timeFromSet, 0).Add(nanos)
