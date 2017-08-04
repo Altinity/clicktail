@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"reflect"
 	"strings"
@@ -9,7 +10,14 @@ import (
 	"time"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/httime"
+	"github.com/honeycombio/honeytail/httime/httimetest"
 	"github.com/honeycombio/mysqltools/query/normalizer"
+)
+
+var (
+	t1, t2, tUnparseable time.Time
+	sqds                 []slowQueryData
 )
 
 type slowQueryData struct {
@@ -24,450 +32,462 @@ const (
 	useLine   = "use honeycomb;"
 )
 
-var t1, _ = time.Parse("02/Jan/2006:15:04:05.000000", "01/Apr/2016:00:31:09.817887")
-var t2, _ = time.Parse("02/Jan/2006:15:04:05.000000", "01/Apr/2016:00:31:10.817887")
-var tUnparseable, _ = time.Parse("02/Jan/2006:15:04:05.000000", "02/Aug/2010:13:24:56")
+func init() {
+	var err error
+	fakeNow, err := time.Parse("02/Jan/2006:15:04:05.000000 -0700", "02/Aug/2010:13:24:56.000000 -0000")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t1, err = time.Parse("02/Jan/2006:15:04:05.000000", "01/Apr/2016:00:31:09.817887")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t2, err = time.Parse("02/Jan/2006:15:04:05.000000", "01/Apr/2016:00:31:10.817887")
+	if err != nil {
+		log.Fatal(err)
+	}
+	httime.DefaultNower = &httimetest.FakeNower{fakeNow}
+	tUnparseable = httime.Now()
 
-// `Time` field has ms resolution but no time zone; `SET timestamp=` is UNIX timestamp but no ms resolution
-// e: mysql… i guess we could/should just combine the unix timestamp second and the parsed timestamp ms
-// justify parsing both
-// could be terrible
+	// `Time` field has ms resolution but no time zone; `SET timestamp=` is UNIX timestamp but no ms resolution
+	// e: mysql… i guess we could/should just combine the unix timestamp second and the parsed timestamp ms
+	// justify parsing both
+	// could be terrible
 
-var sqds = []slowQueryData{
-	{ /* 0 */
-		rawE: []string{
-			"# Time: 2016-04-01T00:31:09.817887Z",
-			"# Query_time: 0.008393  Lock_time: 0.000154 Rows_sent: 1  Rows_examined: 357",
+	sqds = []slowQueryData{
+		{ /* 0 */
+			rawE: []string{
+				"# Time: 2016-04-01T00:31:09.817887Z",
+				"# Query_time: 0.008393  Lock_time: 0.000154 Rows_sent: 1  Rows_examined: 357",
+			},
+			sq: map[string]interface{}{
+				queryTimeKey:    0.008393,
+				lockTimeKey:     0.000154,
+				rowsSentKey:     1,
+				rowsExaminedKey: 357,
+			},
+			timestamp: t1,
 		},
-		sq: map[string]interface{}{
-			queryTimeKey:    0.008393,
-			lockTimeKey:     0.000154,
-			rowsSentKey:     1,
-			rowsExaminedKey: 357,
+		{ /* 1 */
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
+			},
+			sq: map[string]interface{}{
+				userKey:   "someuser",
+				clientKey: "hostfoo [192.168.2.1]",
+			},
+			timestamp: tUnparseable,
 		},
-		timestamp: t1,
-	},
-	{ /* 1 */
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
+		{ /* 2 */
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"# User@Host: root @ localhost []  Id:   233",
+			},
+			sq: map[string]interface{}{
+				userKey:   "root",
+				clientKey: "localhost []",
+			},
+			timestamp: tUnparseable,
 		},
-		sq: map[string]interface{}{
-			userKey:   "someuser",
-			clientKey: "hostfoo [192.168.2.1]",
+		{ /* 3 */
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"# User@Host: root @ []  Id:   233",
+			},
+			sq: map[string]interface{}{
+				userKey:   "root",
+				clientKey: "[]",
+			},
+			timestamp: tUnparseable,
 		},
-		timestamp: tUnparseable,
-	},
-	{ /* 2 */
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"# User@Host: root @ localhost []  Id:   233",
+		{ /* 4 */
+			// RDS style user host line
+			rawE: []string{
+				"# User@Host: root[root] @  [10.0.1.76]  Id: 325920",
+			},
+			sq: map[string]interface{}{
+				userKey:   "root",
+				clientKey: "[10.0.1.76]",
+			},
+			timestamp: tUnparseable,
 		},
-		sq: map[string]interface{}{
-			userKey:   "root",
-			clientKey: "localhost []",
+		{ /* 5 */
+			// RDS style user host line with hostname
+			rawE: []string{
+				"# User@Host: root[root] @ foobar [10.0.1.76]  Id: 325920",
+			},
+			sq: map[string]interface{}{
+				userKey:   "root",
+				clientKey: "foobar [10.0.1.76]",
+			},
+			timestamp: tUnparseable,
 		},
-		timestamp: tUnparseable,
-	},
-	{ /* 2a */
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"# User@Host: root @ []  Id:   233",
+		{ /* 6 */
+			rawE: []string{
+				"# Time: not-a-recognizable time stamp",
+				"# administrator command: Ping;",
+			},
+			sq:        nil,
+			timestamp: time.Time{},
 		},
-		sq: map[string]interface{}{
-			userKey:   "root",
-			clientKey: "[]",
+		{ /* 7 */
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"show status like 'Uptime';",
+			},
+			sq: map[string]interface{}{
+				queryKey:           "show status like 'Uptime'",
+				normalizedQueryKey: "show status like ?",
+				statementKey:       "",
+			},
+			timestamp: t1.Truncate(time.Second),
 		},
-		timestamp: tUnparseable,
-	},
-	{ /* 3 */
-		// RDS style user host line
-		rawE: []string{
-			"# User@Host: root[root] @  [10.0.1.76]  Id: 325920",
+		{ /* 8 */
+			// fails to parse "Time" but we capture unix time and we fall back to the scan normalizer
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
+			},
+			sq: map[string]interface{}{
+				queryKey:           "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100",
+				normalizedQueryKey: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?",
+				statementKey:       "",
+			},
+			timestamp: t1.Truncate(time.Second),
 		},
-		sq: map[string]interface{}{
-			userKey:   "root",
-			clientKey: "[10.0.1.76]",
+		{ /* 9 */
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"SELECT * FROM orders WHERE total > 1000;",
+			},
+			sq: map[string]interface{}{
+				queryKey:           "SELECT * FROM orders WHERE total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t1.Truncate(time.Second),
 		},
-		timestamp: tUnparseable,
-	},
-	{ /* 4 */
-		// RDS style user host line with hostname
-		rawE: []string{
-			"# User@Host: root[root] @ foobar [10.0.1.76]  Id: 325920",
+		{ /* 10 */
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"SELECT *",
+				"FROM orders WHERE",
+				"total > 1000;",
+			},
+			sq: map[string]interface{}{
+				queryKey:           "SELECT * FROM orders WHERE total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t1.Truncate(time.Second),
 		},
-		sq: map[string]interface{}{
-			userKey:   "root",
-			clientKey: "foobar [10.0.1.76]",
+		{ /* 11 */
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"use someDB;",
+			},
+			sq: map[string]interface{}{
+				databaseKey:        "someDB",
+				queryKey:           "use someDB",
+				normalizedQueryKey: "use someDB",
+			},
+			timestamp: t1.Truncate(time.Second),
 		},
-		timestamp: tUnparseable,
-	},
-	{ /* 5 */
-		rawE: []string{
-			"# Time: not-a-recognizable time stamp",
-			"# administrator command: Ping;",
+		{ /* 12 */
+			// a use as well as query
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"use someDB;",
+				"SELECT *",
+				"FROM orders WHERE",
+				"total > 1000;",
+			},
+			sq: map[string]interface{}{
+				databaseKey:        "someDB",
+				queryKey:           "SELECT * FROM orders WHERE total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t1.Truncate(time.Second),
 		},
-		sq:        nil,
-		timestamp: tUnparseable,
-	},
-	{ /* 6 */
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"SET timestamp=1459470669;",
-			"show status like 'Uptime';",
+		// some tests for corrupted logs
+		{ /* 13 */
+			// invalid query + use + query, ignore the invalid query
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"SELECT *",
+				"use someDB;",
+				"SELECT *",
+				"FROM orders WHERE",
+				"total > 1000;",
+			},
+			sq: map[string]interface{}{
+				databaseKey:        "someDB",
+				queryKey:           "SELECT * FROM orders WHERE total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t1.Truncate(time.Second),
 		},
-		sq: map[string]interface{}{
-			queryKey:           "show status like 'Uptime'",
-			normalizedQueryKey: "show status like ?",
-			statementKey:       "",
+		{ /* 14 */
+			// invalid query + set time + query, ignore the invalid query
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"SELECT * FROM orders WHERE",
+				"SET timestamp=1459470670;",
+				"SELECT * FROM orders WHERE total > 1000;",
+			},
+			sq: map[string]interface{}{
+				queryKey:           "SELECT * FROM orders WHERE total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t2.Truncate(time.Second),
 		},
-		timestamp: t1.Truncate(time.Second),
-	},
-	{ /* 7 */
-		// fails to parse "Time" but we capture unix time and we fall back to the scan normalizer
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"SET timestamp=1459470669;",
-			"SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100;",
+		{ /* 15 */
+			// query + query_time comment + query, ignore the first query
+			rawE: []string{
+				"# Time: 2016-04-01T00:31:09.817887Z",
+				"SELECT * FROM orders WHERE total < 1000;",
+				"# Query_time: 0.008393  Lock_time: 0.000154 Rows_sent: 1  Rows_examined: 357",
+				"SELECT * FROM orders WHERE total > 1000;",
+			},
+			sq: map[string]interface{}{
+				queryTimeKey:       0.008393,
+				lockTimeKey:        0.000154,
+				rowsSentKey:        1,
+				rowsExaminedKey:    357,
+				queryKey:           "SELECT * FROM orders WHERE total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t1,
 		},
-		sq: map[string]interface{}{
-			queryKey:           "SELECT * FROM (SELECT  T1.orderNumber,  STATUS,  SUM(quantityOrdered * priceEach) AS  total FROM orders WHERE total > 1000 AS T1 INNER JOIN orderdetails AS T2 ON T1.orderNumber = T2.orderNumber GROUP BY  orderNumber) T WHERE total > 100",
-			normalizedQueryKey: "select * from (select t1.ordernumber, status, sum(quantityordered * priceeach) as total from orders where total > ? as t1 inner join orderdetails as t2 on t1.ordernumber = t2.ordernumber group by ordernumber) t where total > ?",
-			statementKey:       "",
+		{ /* 16 */
+			// invalid query + user@host comment + query, ignore the invalid query
+			rawE: []string{
+				"# Time: 2016-04-01T00:31:09.817887Z",
+				"SELECT * FROM orders WHERE",
+				"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
+				"SELECT * FROM orders WHERE total > 1000;",
+			},
+			sq: map[string]interface{}{
+				userKey:            "someuser",
+				clientKey:          "hostfoo [192.168.2.1]",
+				queryKey:           "SELECT * FROM orders WHERE total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t1,
 		},
-		timestamp: t1.Truncate(time.Second),
-	},
-	{ /* 8 */
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"SET timestamp=1459470669;",
-			"SELECT * FROM orders WHERE total > 1000;",
+		{ /* 17 */
+			// query with a comment
+			rawE: []string{
+				"# Time: 2016-04-01T00:31:09.817887Z",
+				"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
+				"SELECT /* from mysql.go:245 */ /* another comment */ * FROM orders WHERE total > 1000;",
+			},
+			sq: map[string]interface{}{
+				userKey:            "someuser",
+				clientKey:          "hostfoo [192.168.2.1]",
+				queryKey:           "SELECT /* from mysql.go:245 */ /* another comment */ * FROM orders WHERE total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+				commentsKey:        "/* from mysql.go:245 */ /* another comment */",
+			},
+			timestamp: t1,
 		},
-		sq: map[string]interface{}{
-			queryKey:           "SELECT * FROM orders WHERE total > 1000",
-			normalizedQueryKey: "select * from orders where total > ?",
-			tablesKey:          "orders",
-			statementKey:       "select",
+		{ /* 18 */
+			// query without its last line
+			rawE: []string{
+				"# Time: 2016-04-01T00:31:09.817887Z",
+				"SELECT * FROM orders",
+			},
+			sq:        map[string]interface{}{},
+			timestamp: t1,
 		},
-		timestamp: t1.Truncate(time.Second),
-	},
-	{ /* 9 */
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"SET timestamp=1459470669;",
-			"SELECT *",
-			"FROM orders WHERE",
-			"total > 1000;",
+		{ /* 19 */
+			rawE: []string{},
+			sq:   map[string]interface{}{},
 		},
-		sq: map[string]interface{}{
-			queryKey:           "SELECT * FROM orders WHERE total > 1000",
-			normalizedQueryKey: "select * from orders where total > ?",
-			tablesKey:          "orders",
-			statementKey:       "select",
+		{ /* 20 */
+			rawE: []string{
+				"# Time: 160907  3:10:22",
+				"# User@Host: rw[rw] @  [10.96.81.110]  Id: 1394495950",
+				"# Schema: our_index  Last_errno: 0  Killed: 0",
+				"# Query_time: 1.294391  Lock_time: 0.000119  Rows_sent: 4049  Rows_examined: 4049  Rows_affected: 1",
+				"# Bytes_sent: 153824  Tmp_tables: 1  Tmp_disk_tables: 2  Tmp_table_sizes: 3",
+				"# InnoDB_trx_id: A569C193C7",
+				"# QC_Hit: No  Full_scan: No  Full_join: No  Tmp_table: No  Tmp_table_on_disk: No",
+				"# Filesort: No  Filesort_on_disk: No  Merge_passes: 0",
+				"#   InnoDB_IO_r_ops: 0  InnoDB_IO_r_bytes: 0  InnoDB_IO_r_wait: 0.000000",
+				"#   InnoDB_rec_lock_wait: 0.000000  InnoDB_queue_wait: 0.000000",
+				"#   InnoDB_pages_distinct: 6756",
+				"SET timestamp=1473217822;",
+				"/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`;",
+			},
+			sq: map[string]interface{}{
+				userKey:            "rw",
+				clientKey:          "[10.96.81.110]",
+				queryTimeKey:       1.294391,
+				lockTimeKey:        0.000119,
+				rowsSentKey:        4049,
+				rowsExaminedKey:    4049,
+				rowsAffectedKey:    1,
+				queryKey:           "/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`",
+				normalizedQueryKey: "select * from `cats_index` as `cat_cat` where `cat_cat`.`cat_id` between ? and ? order by `cat_cat`.`cat_id`",
+				statementKey:       "select",
+				tablesKey:          "cat_cat cats_index",
+				bytesSentKey:       153824,
+				tmpTablesKey:       1,
+				tmpDiskTablesKey:   2,
+				tmpTableSizesKey:   3,
+				transactionIDKey:   "A569C193C7",
+				queryCacheHitKey:   false,
+				fullScanKey:        false,
+				fullJoinKey:        false,
+				tmpTableKey:        false,
+				tmpTableOnDiskKey:  false,
+				fileSortKey:        false,
+				fileSortOnDiskKey:  false,
+				mergePassesKey:     0,
+				ioROpsKey:          0,
+				ioRBytesKey:        0,
+				ioRWaitKey:         0.0,
+				recLockWaitKey:     0.0,
+				queueWaitKey:       0.0,
+				pagesDistinctKey:   6756,
+			},
+			timestamp: time.Unix(1473217822, 0),
 		},
-		timestamp: t1.Truncate(time.Second),
-	},
-	{ /* 10 */
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"SET timestamp=1459470669;",
-			"use someDB;",
+		{ /* 21 */
+			rawE: []string{
+				"# Time: 160907  3:10:22",
+				"# User@Host: rw[rw] @  [10.96.81.110]  Id: 1394495950",
+				"# Schema: our_index  Last_errno: 0  Killed: 0",
+				"# Query_time: 1.294391  Lock_time: 0.000119  Rows_sent: 4049  Rows_examined: 4049  Rows_affected: 1",
+				"# Bytes_sent: 153824  Tmp_tables: 1  Tmp_disk_tables: 2  Tmp_table_sizes: 3",
+				"# InnoDB_trx_id: A569C193C7",
+				"# QC_Hit: Yes  Full_scan: Yes  Full_join: Yes  Tmp_table: Yes  Tmp_table_on_disk: Yes",
+				"# Filesort: Yes  Filesort_on_disk: Yes  Merge_passes: 42",
+				"#   InnoDB_IO_r_ops: 1  InnoDB_IO_r_bytes: 2  InnoDB_IO_r_wait: 3.000000",
+				"#   InnoDB_rec_lock_wait: 4.000000  InnoDB_queue_wait: 5.000000",
+				"#   InnoDB_pages_distinct: 6756",
+				"SET timestamp=1473217822;",
+				"/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`;",
+			},
+			sq: map[string]interface{}{
+				userKey:            "rw",
+				clientKey:          "[10.96.81.110]",
+				queryTimeKey:       1.294391,
+				lockTimeKey:        0.000119,
+				rowsSentKey:        4049,
+				rowsExaminedKey:    4049,
+				rowsAffectedKey:    1,
+				queryKey:           "/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`",
+				normalizedQueryKey: "select * from `cats_index` as `cat_cat` where `cat_cat`.`cat_id` between ? and ? order by `cat_cat`.`cat_id`",
+				statementKey:       "select",
+				tablesKey:          "cat_cat cats_index",
+				bytesSentKey:       153824,
+				tmpTablesKey:       1,
+				tmpDiskTablesKey:   2,
+				tmpTableSizesKey:   3,
+				transactionIDKey:   "A569C193C7",
+				queryCacheHitKey:   true,
+				fullScanKey:        true,
+				fullJoinKey:        true,
+				tmpTableKey:        true,
+				tmpTableOnDiskKey:  true,
+				fileSortKey:        true,
+				fileSortOnDiskKey:  true,
+				mergePassesKey:     42,
+				ioROpsKey:          1,
+				ioRBytesKey:        2,
+				ioRWaitKey:         3.0,
+				recLockWaitKey:     4.0,
+				queueWaitKey:       5.0,
+				pagesDistinctKey:   6756,
+			},
+			timestamp: time.Unix(1473217822, 0),
 		},
-		sq: map[string]interface{}{
-			databaseKey:        "someDB",
-			queryKey:           "use someDB",
-			normalizedQueryKey: "use someDB",
+		{ /* 22 */
+			rawE: []string{
+				"# User@Host: weaverw[weaverw] @ [10.14.214.13]",
+				"# Thread_id: 78959 Schema: weave3 Last_errno: 0 Killed: 0",
+				"# Query_time: 10.749944 Lock_time: 0.017599 Rows_sent: 0 Rows_examined: 0 Rows_affected: 10 Rows_read: 12",
+				"# Bytes_sent: 51 Tmp_tables: 0 Tmp_disk_tables: 0 Tmp_table_sizes: 0",
+				"# InnoDB_trx_id: 98CF",
+				"use weave3;",
+				"SET timestamp=1364506803;",
+				"SELECT COUNT(*) FROM foo;",
+			},
+			sq: map[string]interface{}{
+				userKey:            "weaverw",
+				clientKey:          "[10.14.214.13]",
+				queryTimeKey:       10.749944,
+				lockTimeKey:        0.017599,
+				rowsSentKey:        0,
+				rowsExaminedKey:    0,
+				rowsAffectedKey:    10,
+				databaseKey:        "weave3",
+				queryKey:           "SELECT COUNT(*) FROM foo",
+				normalizedQueryKey: "select count(*) from foo",
+				statementKey:       "select",
+				tablesKey:          "foo",
+				bytesSentKey:       51,
+				tmpTablesKey:       0,
+				tmpDiskTablesKey:   0,
+				tmpTableSizesKey:   0,
+				transactionIDKey:   "98CF",
+			},
+			timestamp: time.Unix(1364506803, 0),
 		},
-		timestamp: t1.Truncate(time.Second),
-	},
-	{ /* 11 */
-		// a use as well as query
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"SET timestamp=1459470669;",
-			"use someDB;",
-			"SELECT *",
-			"FROM orders WHERE",
-			"total > 1000;",
+		{ /* 23 */
+			rawE: []string{
+				"# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     1",
+				"# Query_time: 0.000439  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0",
+				"SET timestamp=1476901800;",
+				"select @@session.tx_read_only;",
+				"/rdsdbbin/mysql/bin/mysqld, Version: 5.6.22-log (MySQL Community Server (GPL)). started with:",
+				"Tcp port: 3306  Unix socket: /tmp/mysql.sock",
+				"Time                 Id Command    Argument",
+			},
+			sq: map[string]interface{}{
+				userKey:            "rdsadmin",
+				clientKey:          "localhost [127.0.0.1]",
+				queryTimeKey:       0.000439,
+				lockTimeKey:        0.0,
+				rowsSentKey:        1,
+				rowsExaminedKey:    0,
+				queryKey:           "select @@session.tx_read_only",
+				normalizedQueryKey: "select @@session.tx_read_only",
+				statementKey:       "select",
+				tablesKey:          "@@session",
+			},
+			timestamp: time.Unix(1476901800, 0),
 		},
-		sq: map[string]interface{}{
-			databaseKey:        "someDB",
-			queryKey:           "SELECT * FROM orders WHERE total > 1000",
-			normalizedQueryKey: "select * from orders where total > ?",
-			tablesKey:          "orders",
-			statementKey:       "select",
-		},
-		timestamp: t1.Truncate(time.Second),
-	},
-	// some tests for corrupted logs
-	{ /* 12 */
-		// invalid query + use + query, ignore the invalid query
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"SET timestamp=1459470669;",
-			"SELECT *",
-			"use someDB;",
-			"SELECT *",
-			"FROM orders WHERE",
-			"total > 1000;",
-		},
-		sq: map[string]interface{}{
-			databaseKey:        "someDB",
-			queryKey:           "SELECT * FROM orders WHERE total > 1000",
-			normalizedQueryKey: "select * from orders where total > ?",
-			tablesKey:          "orders",
-			statementKey:       "select",
-		},
-		timestamp: t1.Truncate(time.Second),
-	},
-	{ /* 13 */
-		// invalid query + set time + query, ignore the invalid query
-		rawE: []string{
-			"# Time: not-a-parsable-time-stampZ",
-			"SET timestamp=1459470669;",
-			"SELECT * FROM orders WHERE",
-			"SET timestamp=1459470670;",
-			"SELECT * FROM orders WHERE total > 1000;",
-		},
-		sq: map[string]interface{}{
-			queryKey:           "SELECT * FROM orders WHERE total > 1000",
-			normalizedQueryKey: "select * from orders where total > ?",
-			tablesKey:          "orders",
-			statementKey:       "select",
-		},
-		timestamp: t2.Truncate(time.Second),
-	},
-	{ /* 14 */
-		// query + query_time comment + query, ignore the first query
-		rawE: []string{
-			"# Time: 2016-04-01T00:31:09.817887Z",
-			"SELECT * FROM orders WHERE total < 1000;",
-			"# Query_time: 0.008393  Lock_time: 0.000154 Rows_sent: 1  Rows_examined: 357",
-			"SELECT * FROM orders WHERE total > 1000;",
-		},
-		sq: map[string]interface{}{
-			queryTimeKey:       0.008393,
-			lockTimeKey:        0.000154,
-			rowsSentKey:        1,
-			rowsExaminedKey:    357,
-			queryKey:           "SELECT * FROM orders WHERE total > 1000",
-			normalizedQueryKey: "select * from orders where total > ?",
-			tablesKey:          "orders",
-			statementKey:       "select",
-		},
-		timestamp: t1,
-	},
-	{ /* 15 */
-		// invalid query + user@host comment + query, ignore the invalid query
-		rawE: []string{
-			"# Time: 2016-04-01T00:31:09.817887Z",
-			"SELECT * FROM orders WHERE",
-			"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
-			"SELECT * FROM orders WHERE total > 1000;",
-		},
-		sq: map[string]interface{}{
-			userKey:            "someuser",
-			clientKey:          "hostfoo [192.168.2.1]",
-			queryKey:           "SELECT * FROM orders WHERE total > 1000",
-			normalizedQueryKey: "select * from orders where total > ?",
-			tablesKey:          "orders",
-			statementKey:       "select",
-		},
-		timestamp: t1,
-	},
-	{ /* 16 */
-		// query with a comment
-		rawE: []string{
-			"# Time: 2016-04-01T00:31:09.817887Z",
-			"# User@Host: someuser @ hostfoo [192.168.2.1]  Id:   666",
-			"SELECT /* from mysql.go:245 */ /* another comment */ * FROM orders WHERE total > 1000;",
-		},
-		sq: map[string]interface{}{
-			userKey:            "someuser",
-			clientKey:          "hostfoo [192.168.2.1]",
-			queryKey:           "SELECT /* from mysql.go:245 */ /* another comment */ * FROM orders WHERE total > 1000",
-			normalizedQueryKey: "select * from orders where total > ?",
-			tablesKey:          "orders",
-			statementKey:       "select",
-			commentsKey:        "/* from mysql.go:245 */ /* another comment */",
-		},
-		timestamp: t1,
-	},
-	{ /* 17 */
-		// query without its last line
-		rawE: []string{
-			"# Time: 2016-04-01T00:31:09.817887Z",
-			"SELECT * FROM orders",
-		},
-		sq:        map[string]interface{}{},
-		timestamp: t1,
-	},
-	{ /* 18 */
-		rawE: []string{},
-		sq:   map[string]interface{}{},
-	},
-	{ /* 19 */
-		rawE: []string{
-			"# Time: 160907  3:10:22",
-			"# User@Host: rw[rw] @  [10.96.81.110]  Id: 1394495950",
-			"# Schema: our_index  Last_errno: 0  Killed: 0",
-			"# Query_time: 1.294391  Lock_time: 0.000119  Rows_sent: 4049  Rows_examined: 4049  Rows_affected: 1",
-			"# Bytes_sent: 153824  Tmp_tables: 1  Tmp_disk_tables: 2  Tmp_table_sizes: 3",
-			"# InnoDB_trx_id: A569C193C7",
-			"# QC_Hit: No  Full_scan: No  Full_join: No  Tmp_table: No  Tmp_table_on_disk: No",
-			"# Filesort: No  Filesort_on_disk: No  Merge_passes: 0",
-			"#   InnoDB_IO_r_ops: 0  InnoDB_IO_r_bytes: 0  InnoDB_IO_r_wait: 0.000000",
-			"#   InnoDB_rec_lock_wait: 0.000000  InnoDB_queue_wait: 0.000000",
-			"#   InnoDB_pages_distinct: 6756",
-			"SET timestamp=1473217822;",
-			"/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`;",
-		},
-		sq: map[string]interface{}{
-			userKey:            "rw",
-			clientKey:          "[10.96.81.110]",
-			queryTimeKey:       1.294391,
-			lockTimeKey:        0.000119,
-			rowsSentKey:        4049,
-			rowsExaminedKey:    4049,
-			rowsAffectedKey:    1,
-			queryKey:           "/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`",
-			normalizedQueryKey: "select * from `cats_index` as `cat_cat` where `cat_cat`.`cat_id` between ? and ? order by `cat_cat`.`cat_id`",
-			statementKey:       "select",
-			tablesKey:          "cat_cat cats_index",
-			bytesSentKey:       153824,
-			tmpTablesKey:       1,
-			tmpDiskTablesKey:   2,
-			tmpTableSizesKey:   3,
-			transactionIDKey:   "A569C193C7",
-			queryCacheHitKey:   false,
-			fullScanKey:        false,
-			fullJoinKey:        false,
-			tmpTableKey:        false,
-			tmpTableOnDiskKey:  false,
-			fileSortKey:        false,
-			fileSortOnDiskKey:  false,
-			mergePassesKey:     0,
-			ioROpsKey:          0,
-			ioRBytesKey:        0,
-			ioRWaitKey:         0.0,
-			recLockWaitKey:     0.0,
-			queueWaitKey:       0.0,
-			pagesDistinctKey:   6756,
-		},
-		timestamp: time.Unix(1473217822, 0),
-	},
-	{ /* 20 */
-		rawE: []string{
-			"# Time: 160907  3:10:22",
-			"# User@Host: rw[rw] @  [10.96.81.110]  Id: 1394495950",
-			"# Schema: our_index  Last_errno: 0  Killed: 0",
-			"# Query_time: 1.294391  Lock_time: 0.000119  Rows_sent: 4049  Rows_examined: 4049  Rows_affected: 1",
-			"# Bytes_sent: 153824  Tmp_tables: 1  Tmp_disk_tables: 2  Tmp_table_sizes: 3",
-			"# InnoDB_trx_id: A569C193C7",
-			"# QC_Hit: Yes  Full_scan: Yes  Full_join: Yes  Tmp_table: Yes  Tmp_table_on_disk: Yes",
-			"# Filesort: Yes  Filesort_on_disk: Yes  Merge_passes: 42",
-			"#   InnoDB_IO_r_ops: 1  InnoDB_IO_r_bytes: 2  InnoDB_IO_r_wait: 3.000000",
-			"#   InnoDB_rec_lock_wait: 4.000000  InnoDB_queue_wait: 5.000000",
-			"#   InnoDB_pages_distinct: 6756",
-			"SET timestamp=1473217822;",
-			"/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`;",
-		},
-		sq: map[string]interface{}{
-			userKey:            "rw",
-			clientKey:          "[10.96.81.110]",
-			queryTimeKey:       1.294391,
-			lockTimeKey:        0.000119,
-			rowsSentKey:        4049,
-			rowsExaminedKey:    4049,
-			rowsAffectedKey:    1,
-			queryKey:           "/* [vreegU1vU6FPXHBnW6OU_DalWUR8] [our_index_A] [/dynamic_sitemaps.php] */ SELECT * FROM `cats_index` as `Cat_Cat` WHERE `Cat_Cat`.`cat_id` BETWEEN 9670064 AND 9680063 ORDER BY `Cat_Cat`.`cat_id`",
-			normalizedQueryKey: "select * from `cats_index` as `cat_cat` where `cat_cat`.`cat_id` between ? and ? order by `cat_cat`.`cat_id`",
-			statementKey:       "select",
-			tablesKey:          "cat_cat cats_index",
-			bytesSentKey:       153824,
-			tmpTablesKey:       1,
-			tmpDiskTablesKey:   2,
-			tmpTableSizesKey:   3,
-			transactionIDKey:   "A569C193C7",
-			queryCacheHitKey:   true,
-			fullScanKey:        true,
-			fullJoinKey:        true,
-			tmpTableKey:        true,
-			tmpTableOnDiskKey:  true,
-			fileSortKey:        true,
-			fileSortOnDiskKey:  true,
-			mergePassesKey:     42,
-			ioROpsKey:          1,
-			ioRBytesKey:        2,
-			ioRWaitKey:         3.0,
-			recLockWaitKey:     4.0,
-			queueWaitKey:       5.0,
-			pagesDistinctKey:   6756,
-		},
-		timestamp: time.Unix(1473217822, 0),
-	},
-	{ /* 21 */
-		rawE: []string{
-			"# User@Host: weaverw[weaverw] @ [10.14.214.13]",
-			"# Thread_id: 78959 Schema: weave3 Last_errno: 0 Killed: 0",
-			"# Query_time: 10.749944 Lock_time: 0.017599 Rows_sent: 0 Rows_examined: 0 Rows_affected: 10 Rows_read: 12",
-			"# Bytes_sent: 51 Tmp_tables: 0 Tmp_disk_tables: 0 Tmp_table_sizes: 0",
-			"# InnoDB_trx_id: 98CF",
-			"use weave3;",
-			"SET timestamp=1364506803;",
-			"SELECT COUNT(*) FROM foo;",
-		},
-		sq: map[string]interface{}{
-			userKey:            "weaverw",
-			clientKey:          "[10.14.214.13]",
-			queryTimeKey:       10.749944,
-			lockTimeKey:        0.017599,
-			rowsSentKey:        0,
-			rowsExaminedKey:    0,
-			rowsAffectedKey:    10,
-			databaseKey:        "weave3",
-			queryKey:           "SELECT COUNT(*) FROM foo",
-			normalizedQueryKey: "select count(*) from foo",
-			statementKey:       "select",
-			tablesKey:          "foo",
-			bytesSentKey:       51,
-			tmpTablesKey:       0,
-			tmpDiskTablesKey:   0,
-			tmpTableSizesKey:   0,
-			transactionIDKey:   "98CF",
-		},
-		timestamp: time.Unix(1364506803, 0),
-	},
-	{ /* 22 */
-		rawE: []string{
-			"# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     1",
-			"# Query_time: 0.000439  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0",
-			"SET timestamp=1476901800;",
-			"select @@session.tx_read_only;",
-			"/rdsdbbin/mysql/bin/mysqld, Version: 5.6.22-log (MySQL Community Server (GPL)). started with:",
-			"Tcp port: 3306  Unix socket: /tmp/mysql.sock",
-			"Time                 Id Command    Argument",
-		},
-		sq: map[string]interface{}{
-			userKey:            "rdsadmin",
-			clientKey:          "localhost [127.0.0.1]",
-			queryTimeKey:       0.000439,
-			lockTimeKey:        0.0,
-			rowsSentKey:        1,
-			rowsExaminedKey:    0,
-			queryKey:           "select @@session.tx_read_only",
-			normalizedQueryKey: "select @@session.tx_read_only",
-			statementKey:       "select",
-			tablesKey:          "@@session",
-		},
-		timestamp: time.Unix(1476901800, 0),
-	},
+	}
 }
 
 func TestHandleEvent(t *testing.T) {
-	p := &Parser{
-		nower: &FakeNower{},
-	}
+	p := &Parser{}
 	ptp := &perThreadParser{
 		normalizer: &normalizer.Parser{},
 	}
@@ -490,9 +510,7 @@ func TestHandleEvent(t *testing.T) {
 }
 
 func TestTimeProcessing(t *testing.T) {
-	p := &Parser{
-		nower: &FakeNower{},
-	}
+	p := &Parser{}
 	ptp := &perThreadParser{
 		normalizer: &normalizer.Parser{},
 	}
@@ -511,7 +529,7 @@ func TestTimeProcessing(t *testing.T) {
 		{[]string{
 			"# Time: 2016-09-16T19:37:39.006083Z", hostLine, timerLine, useLine,
 		}, time.Date(2016, time.September, 16, 19, 37, 39, 6083000, time.UTC)},
-		{[]string{hostLine, timerLine, useLine}, p.nower.Now()},
+		{[]string{hostLine, timerLine, useLine}, httime.Now()},
 	}
 
 	for _, tt := range tsts {
@@ -722,7 +740,6 @@ func TestProcessLines(t *testing.T) {
 			conf: Options{
 				NumParsers: 5,
 			},
-			nower: &FakeNower{},
 			// normalizer: &normalizer.Parser{},
 		}
 		lines := make(chan string, 10)
@@ -763,7 +780,6 @@ func TestProcessLines(t *testing.T) {
 				NumParsers: 5,
 			},
 			SampleRate: 3,
-			nower:      &FakeNower{},
 			// normalizer: &normalizer.Parser{},
 		}
 		lines := make(chan string, 10)
@@ -785,11 +801,4 @@ func TestProcessLines(t *testing.T) {
 	if numEvents != 5 {
 		t.Errorf("With sampling enabled, only expected 5 events, got %d", numEvents)
 	}
-}
-
-type FakeNower struct{}
-
-func (f *FakeNower) Now() time.Time {
-	fakeTime, _ := time.Parse("02/Jan/2006:15:04:05.000000 -0700", "02/Aug/2010:13:24:56 -0000")
-	return fakeTime
 }

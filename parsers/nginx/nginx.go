@@ -13,6 +13,7 @@ import (
 	flag "github.com/jessevdk/go-flags"
 
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
 )
 
@@ -22,16 +23,17 @@ const (
 )
 
 type Options struct {
-	ConfigFile    flag.Filename `long:"conf" description:"Path to Nginx config file"`
-	LogFormatName string        `long:"format" description:"Log format name to look for in the Nginx config file"`
+	ConfigFile      flag.Filename `long:"conf" description:"Path to Nginx config file"`
+	LogFormatName   string        `long:"format" description:"Log format name to look for in the Nginx config file"`
+	TimeFieldName   string        `long:"timefield" description:"Name of the field that contains a timestamp"`
+	TimeFieldFormat string        `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)"`
 
-	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of nginx parsers to spin up"`
 }
 
 type Parser struct {
 	conf       Options
 	lineParser LineParser
-	nower      Nower
 }
 
 func (n *Parser) Init(options interface{}) error {
@@ -53,7 +55,6 @@ func (n *Parser) Init(options interface{}) error {
 		parser: parser,
 	}
 	n.lineParser = gonxParser
-	n.nower = &RealNower{}
 	return nil
 }
 
@@ -112,7 +113,7 @@ func (n *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					}).Debug("failed to typeify event")
 					continue
 				}
-				timestamp := getTimestamp(n.nower, typedEvent)
+				timestamp := n.getTimestamp(typedEvent)
 
 				e := event.Event{
 					Timestamp: timestamp,
@@ -154,50 +155,29 @@ func typeifyParsedLine(pl map[string]string) (map[string]interface{}, error) {
 	return msi, nil
 }
 
-type Nower interface {
-	Now() time.Time
-}
-
-type RealNower struct{}
-
-func (r *RealNower) Now() time.Time {
-	return time.Now().UTC()
-}
-
 // tries to extract a timestamp from the log line
-func getTimestamp(nower Nower, evMap map[string]interface{}) time.Time {
-	var timestamp time.Time
-	var err error
-	defer delete(evMap, "time_local")
-	defer delete(evMap, "time_iso8601")
-	if val, ok := evMap["time_local"]; ok {
-		rawTime, found := val.(string)
-		if !found {
-			// unable to parse string. log and return Now()
-			logrus.WithFields(logrus.Fields{
-				"expected_time": val,
-			}).Debug("unable to coerce expected time to string")
-			return nower.Now()
+func (n *Parser) getTimestamp(evMap map[string]interface{}) time.Time {
+	var (
+		setBothFieldsMsg = "Timestamp format and field must both be set to be used, one was not. Using current time instead."
+	)
+
+	// Custom (user-defined) timestamp field/format takes priority over the
+	// default parsing behavior. Try that first.
+	if n.conf.TimeFieldFormat != "" || n.conf.TimeFieldName != "" {
+		if n.conf.TimeFieldFormat == "" || n.conf.TimeFieldName == "" {
+			logrus.Debug(setBothFieldsMsg)
+			return httime.Now()
 		}
-		timestamp, err = time.Parse(commonLogFormatTimeLayout, rawTime)
-		if err != nil {
-			timestamp = nower.Now()
-		}
-	} else if val, ok := evMap["time_iso8601"]; ok {
-		rawTime, found := val.(string)
-		if !found {
-			// unable to parse string. log and return Now()
-			logrus.WithFields(logrus.Fields{
-				"expected_time": val,
-			}).Debug("unable to coerce expected time to string")
-			return nower.Now()
-		}
-		timestamp, err = time.Parse(iso8601TimeLayout, rawTime)
-		if err != nil {
-			timestamp = nower.Now()
-		}
-	} else {
-		timestamp = nower.Now()
+		return httime.GetTimestamp(evMap, n.conf.TimeFieldName, n.conf.TimeFieldFormat)
 	}
-	return timestamp
+
+	if _, ok := evMap["time_local"]; ok {
+		return httime.GetTimestamp(evMap, "time_local", commonLogFormatTimeLayout)
+	}
+
+	if _, ok := evMap["time_iso8601"]; ok {
+		return httime.GetTimestamp(evMap, "time_iso8601", iso8601TimeLayout)
+	}
+
+	return httime.GetTimestamp(evMap, "", "")
 }
