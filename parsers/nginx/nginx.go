@@ -10,7 +10,6 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/honeycombio/gonx"
-	flag "github.com/jessevdk/go-flags"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
@@ -23,10 +22,10 @@ const (
 )
 
 type Options struct {
-	ConfigFile      flag.Filename `long:"conf" description:"Path to Nginx config file"`
-	LogFormatName   string        `long:"format" description:"Log format name to look for in the Nginx config file"`
-	TimeFieldName   string        `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat string        `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)"`
+	ConfigFile      string `long:"conf" description:"Path to Nginx config file"`
+	LogFormatName   string `long:"format" description:"Log format name to look for in the Nginx config file"`
+	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
+	TimeFieldFormat string `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)"`
 
 	NumParsers int `hidden:"true" description:"number of nginx parsers to spin up"`
 }
