@@ -298,6 +298,9 @@ func getRole(db *sql.DB) (*string, error) {
 }
 
 func isMySQLHeaderLine(line string) bool {
+	if len(line) == 0 {
+		return false
+	}
 	first := line[0]
 	return (first == '/' && reMySQLVersion.MatchString(line)) ||
 		(first == 'T' && reMySQLPortSock.MatchString(line)) ||

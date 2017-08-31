@@ -177,6 +177,7 @@ func init() {
 			timestamp: t1.Truncate(time.Second),
 		},
 		{ /* 10 */
+			// query spans multiple lines
 			rawE: []string{
 				"# Time: not-a-parsable-time-stampZ",
 				"SET timestamp=1459470669;",
@@ -529,6 +530,7 @@ func init() {
 			timestamp: time.Unix(1476901800, 0),
 		},
 		{ /* 26 */
+			// timestamp is old style
 			rawE: []string{
 				"# Time: 040116 00:31:09",
 				"# Query_time: 0.008393",
@@ -539,6 +541,7 @@ func init() {
 			timestamp: t3,
 		},
 		{ /* 27 */
+			// timestamp is old style and has millisec precision - comes from percona
 			rawE: []string{
 				"# Time: 040116 00:31:09.817887",
 				"# Query_time: 0.008393",
@@ -547,6 +550,43 @@ func init() {
 				queryTimeKey: 0.008393,
 			},
 			timestamp: t1,
+		},
+		{ /* 28 */
+			// query spans multiple lines, initial line blank
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"",
+				"SELECT *",
+				"FROM orders WHERE",
+				"total > 1000;",
+			},
+			sq: map[string]interface{}{
+				queryKey:           "SELECT * FROM orders WHERE total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t1.Truncate(time.Second),
+		},
+		{ /* 29 */
+			// query spans multiple lines, initial line blank, tabs and spaces
+			rawE: []string{
+				"# Time: not-a-parsable-time-stampZ",
+				"SET timestamp=1459470669;",
+				"",
+				"    SELECT *	",
+				"    	FROM orders WHERE   ",
+				"	total > 1000;",
+				"",
+			},
+			sq: map[string]interface{}{
+				queryKey: "SELECT *	     	FROM orders WHERE    	total > 1000",
+				normalizedQueryKey: "select * from orders where total > ?",
+				tablesKey:          "orders",
+				statementKey:       "select",
+			},
+			timestamp: t1.Truncate(time.Second),
 		},
 	}
 }
@@ -564,7 +604,7 @@ func TestHandleEvent(t *testing.T) {
 		}
 		for k, v := range sqd.sq {
 			if !reflect.DeepEqual(res[k], v) {
-				t.Errorf("case num %d, key %s:\n\texpected:\t%+v\n\tgot:\t\t%+v", i, k, v, res[k])
+				t.Errorf("case num %d, key %s:\n\texpected:\t%q\n\tgot:\t\t%q", i, k, v, res[k])
 			}
 		}
 		if timestamp.UnixNano() != sqd.timestamp.UnixNano() {
