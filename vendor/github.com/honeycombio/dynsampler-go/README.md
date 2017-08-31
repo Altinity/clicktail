@@ -7,6 +7,8 @@ A "sample rate" of 100 means that for every 100 requests, we capture a single ev
 
 For full documentation, look at the [dynsampler godoc](https://godoc.org/github.com/honeycombio/dynsampler-go).
 
+For more information about using Honeycomb, see our [docs](https://honeycomb.io/docs).
+
 ## Sampling Techniques
 
 This package is intended to help sample a stream of tracking events, where events are typically created in response to a stream of traffic (for the purposes of logging or debugging). In general, sampling is used to reduce the total volume of events necessary to represent the stream of traffic in a meaningful way.

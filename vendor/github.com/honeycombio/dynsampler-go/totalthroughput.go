@@ -69,6 +69,8 @@ func (t *TotalThroughput) updateMaps() {
 	numKeys := len(tmpCounts)
 	if numKeys == 0 {
 		// no traffic the last 30s. clear the result map
+		t.lock.Lock()
+		defer t.lock.Unlock()
 		t.savedSampleRates = make(map[string]int)
 		return
 	}
@@ -84,6 +86,8 @@ func (t *TotalThroughput) updateMaps() {
 		newSavedSampleRates[k] = rate
 	}
 	// save newly calculated sample rates
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	t.savedSampleRates = newSavedSampleRates
 }
 
