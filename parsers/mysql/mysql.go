@@ -110,7 +110,6 @@ var (
 	reInnodbUsage2     = parsers.ExtRegexp{regexp.MustCompile("^# +InnoDB_rec_lock_wait: (?P<rec_lock_wait>[0-9.]+)  InnoDB_queue_wait: (?P<queue_wait>[0-9.]+).*$")}
 	reInnodbUsage3     = parsers.ExtRegexp{regexp.MustCompile("^# +InnoDB_pages_distinct: (?P<pages_distinct>[0-9]+).*")}
 	reSetTime          = parsers.ExtRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
-	reQuery            = parsers.ExtRegexp{regexp.MustCompile("^(?P<query>[^#]*).*$")}
 	reUse              = parsers.ExtRegexp{regexp.MustCompile("^(?i)use ")}
 
 	// if 'flush logs' is run at the mysql prompt (which rds commonly does, apparently) the following shows up in slow query log:
@@ -503,8 +502,10 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 			timeFromSet, _ = strconv.ParseInt(mg["unixTime"], 10, 64)
 		} else if isMySQLHeaderLine(line) {
 			// ignore and skip the header lines
-		} else if _, mg := reQuery.FindStringSubmatchMap(line); mg != nil {
-			query = query + " " + mg["query"]
+		} else if !strings.HasPrefix(line, "# ") {
+			// treat any other line that doesn't start with '# ' as part of the
+			// query
+			query = query + " " + line
 			if strings.HasSuffix(query, ";") {
 				q := strings.TrimSpace(strings.TrimSuffix(query, ";"))
 				sq[queryKey] = q

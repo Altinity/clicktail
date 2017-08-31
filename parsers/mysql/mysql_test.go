@@ -483,6 +483,47 @@ func init() {
 			},
 			timestamp: time.Unix(1476901800, 0),
 		},
+		{ /* 24 */
+			rawE: []string{
+				"# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     1",
+				"# Query_time: 0.000439  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0",
+				"SET timestamp=1476901800;",
+				"SELECT * FROM users WHERE id='#';",
+			},
+			sq: map[string]interface{}{
+				userKey:            "rdsadmin",
+				clientKey:          "localhost [127.0.0.1]",
+				queryTimeKey:       0.000439,
+				lockTimeKey:        0.0,
+				rowsSentKey:        1,
+				rowsExaminedKey:    0,
+				queryKey:           "SELECT * FROM users WHERE id='#'",
+				normalizedQueryKey: "select * from users where id = ?",
+				statementKey:       "select",
+				tablesKey:          "users",
+			},
+			timestamp: time.Unix(1476901800, 0),
+		},
+		{ /* 25 */
+			rawE: []string{
+				"# User@Host: rdsadmin[rdsadmin] @ localhost [127.0.0.1]  Id:     1",
+				"# Query_time: 0.000439  Lock_time: 0.000000 Rows_sent: 1  Rows_examined: 0",
+				"SET timestamp=1476901800;",
+				"SELECT 1 /* this is a comment with a # in it */;",
+			},
+			sq: map[string]interface{}{
+				userKey:            "rdsadmin",
+				clientKey:          "localhost [127.0.0.1]",
+				queryTimeKey:       0.000439,
+				lockTimeKey:        0.0,
+				rowsSentKey:        1,
+				rowsExaminedKey:    0,
+				queryKey:           "SELECT 1 /* this is a comment with a # in it */",
+				normalizedQueryKey: "select ?",
+				statementKey:       "select",
+			},
+			timestamp: time.Unix(1476901800, 0),
+		},
 	}
 }
 
