@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	t1, t2, tUnparseable time.Time
-	sqds                 []slowQueryData
+	t1, t2, t3, tUnparseable time.Time
+	sqds                     []slowQueryData
 )
 
 type slowQueryData struct {
@@ -43,6 +43,10 @@ func init() {
 		log.Fatal(err)
 	}
 	t2, err = time.Parse("02/Jan/2006:15:04:05.000000", "01/Apr/2016:00:31:10.817887")
+	if err != nil {
+		log.Fatal(err)
+	}
+	t3, err = time.Parse("02/Jan/2006:15:04:05", "01/Apr/2016:00:31:09")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -523,6 +527,26 @@ func init() {
 				statementKey:       "select",
 			},
 			timestamp: time.Unix(1476901800, 0),
+		},
+		{ /* 26 */
+			rawE: []string{
+				"# Time: 040116 00:31:09",
+				"# Query_time: 0.008393",
+			},
+			sq: map[string]interface{}{
+				queryTimeKey: 0.008393,
+			},
+			timestamp: t3,
+		},
+		{ /* 27 */
+			rawE: []string{
+				"# Time: 040116 00:31:09.817887",
+				"# Query_time: 0.008393",
+			},
+			sq: map[string]interface{}{
+				queryTimeKey: 0.008393,
+			},
+			timestamp: t1,
 		},
 	}
 }

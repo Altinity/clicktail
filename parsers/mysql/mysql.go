@@ -98,10 +98,14 @@ const (
 )
 
 var (
-	reTime             = parsers.ExtRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
-	reAdminPing        = parsers.ExtRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
-	reUser             = parsers.ExtRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+?)( Id:.+)?$")}
-	reQueryStats       = parsers.ExtRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
+	reTime = parsers.ExtRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
+	// older versions of the mysql slow query log use this format for the timestamp
+	reOldTime    = parsers.ExtRegexp{regexp.MustCompile("^# Time: (?P<datetime>[0-9]+ [0-9:.]+)")}
+	reAdminPing  = parsers.ExtRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
+	reUser       = parsers.ExtRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+?)( Id:.+)?$")}
+	reQueryStats = parsers.ExtRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
+	// when capturing the log from the wire, you don't get lock time etc., only query time
+	reTCPQueryStats    = parsers.ExtRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+).*$")}
 	reServStats        = parsers.ExtRegexp{regexp.MustCompile("^# Bytes_sent: (?P<bytesSent>[0-9.]+) *Tmp_tables: (?P<tmpTables>[0-9.]+) *Tmp_disk_tables: (?P<tmpDiskTables>[0-9]+) *Tmp_table_sizes: (?P<tmpTableSizes>[0-9]+).*$")}
 	reInnodbTrx        = parsers.ExtRegexp{regexp.MustCompile("^# InnoDB_trx_id: (?P<trxId>[A-F0-9]+) *$")}
 	reInnodbQueryPlan1 = parsers.ExtRegexp{regexp.MustCompile("^# QC_Hit: (?P<query_cache_hit>[[:alpha:]]+)  Full_scan: (?P<full_scan>[[:alpha:]]+)  Full_join: (?P<full_join>[[:alpha:]]+)  Tmp_table: (?P<tmp_table>[[:alpha:]]+)  Tmp_table_on_disk: (?P<tmp_table_on_disk>[[:alpha:]]+).*$")}
@@ -122,6 +126,7 @@ var (
 )
 
 const timeFormat = "2006-01-02T15:04:05.000000"
+const oldTimeFormat = "010206 15:04:05.999999"
 
 type Options struct {
 	Host          string `long:"host" description:"MySQL host in the format (address:port)"`
@@ -410,6 +415,8 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 		// parse each line and populate the map of attributes
 		if _, mg := reTime.FindStringSubmatchMap(line); mg != nil {
 			timeFromComment, _ = time.Parse(timeFormat, mg["time"])
+		} else if _, mg := reOldTime.FindStringSubmatchMap(line); mg != nil {
+			timeFromComment, _ = time.Parse(oldTimeFormat, mg["datetime"])
 		} else if reAdminPing.MatchString(line) {
 			// this event is an administrative ping and we should
 			// ignore the entire event
@@ -438,6 +445,11 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 			}
 			if rowsAffected, err := strconv.Atoi(mg["rowsAffected"]); err == nil {
 				sq[rowsAffectedKey] = rowsAffected
+			}
+		} else if _, mg := reTCPQueryStats.FindStringSubmatchMap(line); mg != nil {
+			query = ""
+			if queryTime, err := strconv.ParseFloat(mg["queryTime"], 64); err == nil {
+				sq[queryTimeKey] = queryTime
 			}
 		} else if _, mg := reServStats.FindStringSubmatchMap(line); mg != nil {
 			query = ""
