@@ -220,19 +220,19 @@ func addParserDefaultOptions(options *GlobalOptions) {
 func sanityCheckOptions(options *GlobalOptions) {
 	switch {
 	case options.Reqs.ParserName == "":
-		fmt.Println("Parser required.")
+		fmt.Println("Parser required to be specified with the --parser flag.")
 		usage()
 		os.Exit(1)
 	case options.Reqs.WriteKey == "" || options.Reqs.WriteKey == "NULL":
-		fmt.Println("Write key required.")
+		fmt.Println("Write key required to be specified with the --writekey flag.")
 		usage()
 		os.Exit(1)
 	case len(options.Reqs.LogFiles) == 0:
-		fmt.Println("Log file name or '-' required.")
+		fmt.Println("Log file name or '-' required to be specified with the --file flag.")
 		usage()
 		os.Exit(1)
 	case options.Reqs.Dataset == "":
-		fmt.Println("Dataset name required.")
+		fmt.Println("Dataset name required with the --dataset flag.")
 		usage()
 		os.Exit(1)
 	case options.SampleRate == 0:
