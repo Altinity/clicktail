@@ -417,9 +417,9 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 	for _, line := range rawE {
 		// parse each line and populate the map of attributes
 		if _, mg := reTime.FindStringSubmatchMap(line); mg != nil {
-			timeFromComment, _ = time.Parse(timeFormat, mg["time"])
+			timeFromComment, _ = httime.Parse(timeFormat, mg["time"])
 		} else if _, mg := reOldTime.FindStringSubmatchMap(line); mg != nil {
-			timeFromComment, _ = time.Parse(oldTimeFormat, mg["datetime"])
+			timeFromComment, _ = httime.Parse(oldTimeFormat, mg["datetime"])
 		} else if reAdminPing.MatchString(line) {
 			// this event is an administrative ping and we should
 			// ignore the entire event

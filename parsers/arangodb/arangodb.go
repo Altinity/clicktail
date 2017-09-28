@@ -10,6 +10,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/honeycombio/honeytail/event"
+	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers"
 )
 
@@ -230,7 +231,7 @@ func (p *Parser) parseTimestamp(values map[string]interface{}) (time.Time, error
 		var err error
 		for _, f := range timestampFormats {
 			var timestamp time.Time
-			timestamp, err = time.Parse(f, timestampValue)
+			timestamp, err = httime.Parse(f, timestampValue)
 			if err == nil {
 				return timestamp, nil
 			}

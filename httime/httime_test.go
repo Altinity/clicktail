@@ -36,18 +36,23 @@ func TestFormat(t *testing.T) {
 }
 
 type testTimestamp struct {
-	format    string      // the format this test's time is in
-	fieldName string      // the field in the map containing the time
-	input     interface{} // the value corresponding to the fieldName
-	auto      bool        // whether the input should be parsable even without specifying format/fieldName
-	expected  time.Time   // the expected time object to get back
+	format    string         // the format this test's time is in
+	fieldName string         // the field in the map containing the time
+	input     interface{}    // the value corresponding to the fieldName
+	tz        *time.Location // the expected time zone
+	auto      bool           // whether the input should be parsable even without specifying format/fieldName
+	expected  time.Time      // the expected time object to get back
 }
+
+var utc = time.UTC
+var pacific, _ = time.LoadLocation("America/Los_Angeles")
 
 var tts = []testTimestamp{
 	{
 		format:    "2006-01-02 15:04:05.999999999 -0700 MST",
 		fieldName: "time",
 		input:     "2014-04-10 19:57:38.123456789 -0800 PST",
+		tz:        utc,
 		auto:      true,
 		expected:  time.Unix(1397188658, 123456789),
 	},
@@ -55,6 +60,7 @@ var tts = []testTimestamp{
 		format:    time.RFC3339Nano,
 		fieldName: "timestamp",
 		input:     "2014-04-10T19:57:38.123456789-08:00",
+		tz:        utc,
 		auto:      true,
 		expected:  time.Unix(1397188658, 123456789),
 	},
@@ -62,6 +68,7 @@ var tts = []testTimestamp{
 		format:    time.RFC3339,
 		fieldName: "Date",
 		input:     "2014-04-10T19:57:38-08:00",
+		tz:        utc,
 		auto:      true,
 		expected:  time.Unix(1397188658, 0),
 	},
@@ -69,6 +76,7 @@ var tts = []testTimestamp{
 		format:    time.RFC3339,
 		fieldName: "Date",
 		input:     "2014-04-10T19:57:38Z",
+		tz:        utc,
 		auto:      true,
 		expected:  time.Unix(1397159858, 0),
 	},
@@ -76,6 +84,7 @@ var tts = []testTimestamp{
 		format:    time.RubyDate,
 		fieldName: "datetime",
 		input:     "Thu Apr 10 19:57:38.123456789 -0800 2014",
+		tz:        utc,
 		auto:      true,
 		expected:  time.Unix(1397188658, 123456789),
 	},
@@ -83,35 +92,48 @@ var tts = []testTimestamp{
 		format:    "%Y-%m-%d %H:%M",
 		fieldName: "time",
 		input:     "2014-07-30 07:02",
+		tz:        utc,
 		expected:  time.Unix(1406703720, 0),
+	},
+	{
+		format:    "%Y-%m-%d %H:%M",
+		fieldName: "time",
+		input:     "2014-07-30 07:02",
+		tz:        pacific,
+		expected:  time.Unix(1406728920, 0),
 	},
 	{
 		format:    "%Y-%m-%d %k:%M", // check trailing space behavior
 		fieldName: "time",
 		input:     "2014-07-30  7:02",
+		tz:        utc,
 		expected:  time.Unix(1406703720, 0),
 	},
 	{
 		format:    "%Y-%m-%d %H:%M:%S",
 		fieldName: "time",
 		input:     "2014-07-30 07:02:15",
+		tz:        utc,
 		expected:  time.Unix(1406703735, 0),
 	},
 	{
 		format:    UnixTimestampFmt,
 		fieldName: "time",
 		input:     "1440116565",
+		tz:        utc,
 		expected:  time.Unix(1440116565, 0),
 	},
 	{
 		format:    UnixTimestampFmt,
 		fieldName: "time",
 		input:     1440116565,
+		tz:        utc,
 		expected:  time.Unix(1440116565, 0),
 	},
 	{
 		format:    "%Y-%m-%d %z",
 		input:     "2014-04-10 -0700",
+		tz:        utc,
 		fieldName: "time",
 		expected:  time.Unix(1397113200, 0),
 	},
@@ -119,6 +141,7 @@ var tts = []testTimestamp{
 
 func TestGetTimestampValid(t *testing.T) {
 	for i, tTimeSet := range tts {
+		Location = tTimeSet.tz
 		if tTimeSet.auto {
 			resp := GetTimestamp(map[string]interface{}{tTimeSet.fieldName: tTimeSet.input}, "", "")
 			if !resp.Equal(tTimeSet.expected) {

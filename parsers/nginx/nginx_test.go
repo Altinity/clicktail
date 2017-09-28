@@ -15,7 +15,7 @@ import (
 )
 
 func init() {
-	fakeNow, err := time.Parse(commonLogFormatTimeLayout, "02/Jan/2010:12:34:56 -0000")
+	fakeNow, err := time.ParseInLocation(commonLogFormatTimeLayout, "02/Jan/2010:12:34:56 -0000", time.UTC)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func (f *FakeLineParser) ParseLine(line string) (map[string]string, error) {
 }
 
 func TestProcessLines(t *testing.T) {
-	t1, _ := time.Parse(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 +0000")
+	t1, _ := time.ParseInLocation(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 -0000", time.UTC)
 	preReg := &parsers.ExtRegexp{regexp.MustCompile("^.*:..:.. (?P<pre_hostname>[a-zA-Z-.]+): ")}
 	tlm := []testLineMaps{
 		{
@@ -102,13 +102,13 @@ func TestProcessLines(t *testing.T) {
 	for _, pair := range tlm {
 		resp := <-send
 		if !reflect.DeepEqual(resp, pair.ev) {
-			t.Fatalf("line resp didn't match up for %s. Expected: %v, actual: %v",
-				pair.line, pair.ev.Data, resp.Data)
+			t.Fatalf("line resp didn't match up for %s. Expected: %+v, actual: %+v",
+				pair.line, pair.ev, resp)
 		}
 	}
 }
 func TestProcessLinesNoPreReg(t *testing.T) {
-	t1, _ := time.Parse(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 +0000")
+	t1, _ := time.ParseInLocation(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 +0000", time.UTC)
 	tlm := []testLineMaps{
 		{
 			line:        "https - 10.252.4.24 - - [08/Oct/2015:00:26:26 +0000] 200 174 0.099",
@@ -201,11 +201,11 @@ func TestTypeifyParsedLine(t *testing.T) {
 }
 
 func TestGetTimestamp(t *testing.T) {
-	t1, _ := time.Parse(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 +0000")
-	t2, _ := time.Parse(commonLogFormatTimeLayout, "02/Jan/2010:12:34:56 -0000")
+	t1, _ := time.ParseInLocation(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 +0000", time.UTC)
+	t2, _ := time.ParseInLocation(commonLogFormatTimeLayout, "02/Jan/2010:12:34:56 -0000", time.UTC)
 	userDefinedTimeFormat := "2006-01-02T15:04:05.9999Z"
 	exampleCustomFormatTimestamp := "2017-07-31T20:40:57.980264Z"
-	t3, _ := time.Parse(userDefinedTimeFormat, exampleCustomFormatTimestamp)
+	t3, _ := time.ParseInLocation(userDefinedTimeFormat, exampleCustomFormatTimestamp, time.UTC)
 	testCases := []struct {
 		desc      string
 		conf      Options

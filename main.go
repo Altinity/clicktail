@@ -15,6 +15,7 @@ import (
 	"github.com/honeycombio/libhoney-go"
 	flag "github.com/jessevdk/go-flags"
 
+	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/parsers/arangodb"
 	"github.com/honeycombio/honeytail/parsers/htjson"
 	"github.com/honeycombio/honeytail/parsers/keyval"
@@ -54,6 +55,8 @@ type GlobalOptions struct {
 	StatusInterval   uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
 	Backfill         bool `long:"backfill" description:"Configure honeytail to ingest old data in order to backfill Honeycomb. Sets the correct values for --backoff, --tail.read_from, and --tail.stop"`
 
+	Localtime         bool     `long:"localtime" description:"When parsing a timestamp that has no time zone, assume it is in the same timezone as localhost instead of UTC (the default)"`
+	Timezone          string   `long:"timezone" description:"When parsing a timestamp use this time zone instead of UTC (the default). Must be specified in TZ format as seen here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"`
 	ScrubFields       []string `long:"scrub_field" description:"For the field listed, apply a one-way hash to the field content. May be specified multiple times"`
 	DropFields        []string `long:"drop_field" description:"Do not send the field to Honeycomb. May be specified multiple times"`
 	AddFields         []string `long:"add_field" description:"Add the field to every event. Field should be key=val. May be specified multiple times"`
@@ -137,6 +140,22 @@ func main() {
 		options.BackOff = true
 		options.Tail.ReadFrom = "beginning"
 		options.Tail.Stop = true
+	}
+
+	// set time zone info
+	if options.Localtime {
+		httime.Location = time.Now().Location()
+	}
+	if options.Timezone != "" {
+		loc, err := time.LoadLocation(options.Timezone)
+		if err != nil {
+			fmt.Printf("time zone '%s' not successfully parsed.\n", options.Timezone)
+			fmt.Printf("see https://en.wikipedia.org/wiki/List_of_tz_database_time_zones for a list of time zones\n")
+			fmt.Printf("expected format example: America/Los_Angeles\n")
+			fmt.Printf("Specific error: %s\n", err.Error())
+			os.Exit(1)
+		}
+		httime.Location = loc
 	}
 
 	setVersionUserAgent(options.Backfill, options.Reqs.ParserName)
