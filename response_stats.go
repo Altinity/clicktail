@@ -60,11 +60,8 @@ func (r *responseStats) update(rsp libhoney.Response) {
 		r.maxDuration = rsp.Duration
 	}
 	r.sumDuration += rsp.Duration
-	// store one full event per logAndReset cycle
-	if r.event == nil {
-		ev := rsp.Metadata.(event.Event)
-		r.event = &ev
-	}
+	ev := rsp.Metadata.(event.Event)
+	r.event = &ev
 }
 
 // log the current stats and reset them all to zero.
@@ -96,14 +93,17 @@ func (r *responseStats) log() {
 		"errors":           r.errors,
 	}).Info("Summary of sent events")
 	if r.event != nil {
-		fields := r.event.Data
+		fields := make(map[string]interface{})
+		fields["event"] = r.event.Data
 		fields["event_timestamp"] = r.event.Timestamp
-		logrus.WithFields(fields).Info("Sample parsed event")
+		logrus.WithFields(fields).Info("Last parsed event")
 	}
 }
 
 // log the total count on its own
 func (r *responseStats) logFinal() {
+	r.lock.Lock()
+	defer r.lock.Unlock()
 	r.totalCount += r.count
 	for code, count := range r.statusCodes {
 		r.totalStatusCodes[code] += count
@@ -128,5 +128,4 @@ func (r *responseStats) reset() {
 	r.maxDuration = 0
 	r.sumDuration = 0
 	r.minDuration = 0
-	r.event = nil
 }
