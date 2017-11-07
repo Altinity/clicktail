@@ -12,13 +12,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
-	"reflect"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
 
 	"github.com/honeycombio/honeytail/event"
@@ -64,9 +61,9 @@ func TestHTTPtest(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	testEquals(t, res.StatusCode, 200)
-	testEquals(t, string(greeting), "whatup pikachu")
-	testEquals(t, ts.rsp.reqCounter, 1)
+	assert.Equal(t, res.StatusCode, 200)
+	assert.Equal(t, string(greeting), "whatup pikachu")
+	assert.Equal(t, ts.rsp.reqCounter, 1)
 }
 
 func TestBasicSend(t *testing.T) {
@@ -83,13 +80,13 @@ func TestBasicSend(t *testing.T) {
 	fmt.Fprintf(fh, `{"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 1)
-	testEquals(t, ts.rsp.evtCounter, 1)
-	testContains(t, ts.rsp.reqBody, `{"format":"json"}`)
+	assert.Equal(t, ts.rsp.reqCounter, 1)
+	assert.Equal(t, ts.rsp.evtCounter, 1)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json"}`)
 	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
-	testEquals(t, teamID, "abcabc123123")
+	assert.Equal(t, teamID, "abcabc123123")
 	requestURL := ts.rsp.req.URL.Path
-	testEquals(t, requestURL, "/1/batch/pika")
+	assert.Equal(t, requestURL, "/1/batch/pika")
 }
 
 func TestMultipleFiles(t *testing.T) {
@@ -113,14 +110,14 @@ func TestMultipleFiles(t *testing.T) {
 	fmt.Fprintf(fh2, `{"key2":"val2"}`)
 	opts.Reqs.LogFiles = []string{logFile1, logFile2}
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 1)
-	testEquals(t, ts.rsp.evtCounter, 2)
-	testContains(t, ts.rsp.reqBody, `{"key1":"val1"}`)
-	testContains(t, ts.rsp.reqBody, `{"key2":"val2"}`)
+	assert.Equal(t, ts.rsp.reqCounter, 1)
+	assert.Equal(t, ts.rsp.evtCounter, 2)
+	assert.Contains(t, ts.rsp.reqBody, `{"key1":"val1"}`)
+	assert.Contains(t, ts.rsp.reqBody, `{"key2":"val2"}`)
 	teamID := ts.rsp.req.Header.Get("X-Honeycomb-Team")
-	testEquals(t, teamID, "abcabc123123")
+	assert.Equal(t, teamID, "abcabc123123")
 	requestURL := ts.rsp.req.URL.Path
-	testEquals(t, requestURL, "/1/batch/pika")
+	assert.Equal(t, requestURL, "/1/batch/pika")
 }
 
 func TestMultiLineMultiFile(t *testing.T) {
@@ -170,15 +167,15 @@ SELECT
                 FROM datasets WHERE team_id=17 AND slug='api-prod';`)
 	opts.Reqs.LogFiles = []string{logFile1, logFile2}
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 1)
-	testEquals(t, ts.rsp.evtCounter, 4)
-	testContains(t, ts.rsp.reqBody, `"query":"SELECT * FROM orders`)
-	testContains(t, ts.rsp.reqBody, `"tables":"orders"`)
-	testContains(t, ts.rsp.reqBody, `"query":"show status like 'Uptime'`)
-	testContains(t, ts.rsp.reqBody, `"query":"SELECT certs.* FROM`)
-	testContains(t, ts.rsp.reqBody, `"tables":"certs"`)
-	testContains(t, ts.rsp.reqBody, `"query":"SELECT id, team_id, name`)
-	testContains(t, ts.rsp.reqBody, `"tables":"datasets"`)
+	assert.Equal(t, ts.rsp.reqCounter, 1)
+	assert.Equal(t, ts.rsp.evtCounter, 4)
+	assert.Contains(t, ts.rsp.reqBody, `"query":"SELECT * FROM orders`)
+	assert.Contains(t, ts.rsp.reqBody, `"tables":"orders"`)
+	assert.Contains(t, ts.rsp.reqBody, `"query":"show status like 'Uptime'`)
+	assert.Contains(t, ts.rsp.reqBody, `"query":"SELECT certs.* FROM`)
+	assert.Contains(t, ts.rsp.reqBody, `"tables":"certs"`)
+	assert.Contains(t, ts.rsp.reqBody, `"query":"SELECT id, team_id, name`)
+	assert.Contains(t, ts.rsp.reqBody, `"tables":"datasets"`)
 }
 
 func TestSetVersion(t *testing.T) {
@@ -193,22 +190,22 @@ func TestSetVersion(t *testing.T) {
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(opts)
 	userAgent := ts.rsp.req.Header.Get("User-Agent")
-	testContains(t, userAgent, "libhoney-go")
+	assert.Contains(t, userAgent, "libhoney-go")
 	setVersionUserAgent(false, "fancyParser")
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testContains(t, userAgent, "libhoney-go")
-	testContains(t, userAgent, "fancyParser")
+	assert.Contains(t, userAgent, "libhoney-go")
+	assert.Contains(t, userAgent, "fancyParser")
 	BuildID = "test"
 	setVersionUserAgent(false, "fancyParser")
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testContains(t, userAgent, " honeytail/test")
+	assert.Contains(t, userAgent, " honeytail/test")
 	setVersionUserAgent(true, "fancyParser")
 	run(opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	testContains(t, userAgent, " honeytail/test")
-	testContains(t, userAgent, "fancyParser backfill")
+	assert.Contains(t, userAgent, " honeytail/test")
+	assert.Contains(t, userAgent, "fancyParser backfill")
 }
 
 func TestDropField(t *testing.T) {
@@ -222,16 +219,16 @@ func TestDropField(t *testing.T) {
 	fmt.Fprintf(fh, `{"dropme":"chew","format":"json","reallygone":"notyet"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 1)
-	testContains(t, ts.rsp.reqBody, `{"dropme":"chew","format":"json","reallygone":"notyet"}`)
+	assert.Equal(t, ts.rsp.reqCounter, 1)
+	assert.Contains(t, ts.rsp.reqBody, `{"dropme":"chew","format":"json","reallygone":"notyet"}`)
 	opts.DropFields = []string{"dropme"}
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 2)
-	testContains(t, ts.rsp.reqBody, `{"format":"json","reallygone":"notyet"}`)
+	assert.Equal(t, ts.rsp.reqCounter, 2)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","reallygone":"notyet"}`)
 	opts.DropFields = []string{"dropme", "reallygone"}
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 3)
-	testContains(t, ts.rsp.reqBody, `{"format":"json"}`)
+	assert.Equal(t, ts.rsp.reqCounter, 3)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json"}`)
 }
 
 func TestScrubField(t *testing.T) {
@@ -246,8 +243,8 @@ func TestScrubField(t *testing.T) {
 	opts.Reqs.LogFiles = []string{logFileName}
 	opts.ScrubFields = []string{"name"}
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 1)
-	testContains(t, ts.rsp.reqBody, `{"format":"json","name":"e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c"}`)
+	assert.Equal(t, ts.rsp.reqCounter, 1)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","name":"e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c"}`)
 }
 
 func TestAddField(t *testing.T) {
@@ -262,10 +259,10 @@ func TestAddField(t *testing.T) {
 	opts.Reqs.LogFiles = []string{logFileName}
 	opts.AddFields = []string{`newfield=newval`}
 	run(opts)
-	testContains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval"}`)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval"}`)
 	opts.AddFields = []string{"newfield=newval", "second=new"}
 	run(opts)
-	testContains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval","second":"new"}`)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval","second":"new"}`)
 }
 
 func TestLinePrefix(t *testing.T) {
@@ -282,7 +279,7 @@ func TestLinePrefix(t *testing.T) {
 	fmt.Fprintf(logfh, `Nov 13 10:19:31 app23 process.port[pid]: {"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(opts)
-	testContains(t, ts.rsp.reqBody, `{"format":"json","hostname":"app23","server_timestamp":"Nov 13 10:19:31"}`)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","hostname":"app23","server_timestamp":"Nov 13 10:19:31"}`)
 }
 
 func TestRequestShapeRaw(t *testing.T) {
@@ -372,7 +369,7 @@ func TestRequestShapeRaw(t *testing.T) {
 		// get the munged event out
 		res := <-output
 		for evKey, expectedVal := range expectedResult {
-			testEquals(t, res.Data[evKey], expectedVal)
+			assert.Equal(t, res.Data[evKey], expectedVal)
 		}
 	}
 	close(tbs)
@@ -393,7 +390,7 @@ func TestRequestShapeRaw(t *testing.T) {
 		// get the munged event out
 		res := <-output
 		for evKey, expectedVal := range expectedResult {
-			testEquals(t, res.Data[evKey], expectedVal)
+			assert.Equal(t, res.Data[evKey], expectedVal)
 		}
 	}
 	close(tbs)
@@ -416,8 +413,8 @@ func TestSampleRate(t *testing.T) {
 
 	run(opts)
 	// with no sampling, 50 lines -> 50 events
-	testEquals(t, ts.rsp.evtCounter, 50)
-	testContains(t, ts.rsp.reqBody, `{"format":"json49"}`)
+	assert.Equal(t, ts.rsp.evtCounter, 50)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json49"}`)
 	ts.rsp.reset()
 
 	opts.SampleRate = 3
@@ -425,8 +422,8 @@ func TestSampleRate(t *testing.T) {
 	run(opts)
 	// setting a sample rate of 3 gets 17 requests.
 	// tail does the sampling
-	testEquals(t, ts.rsp.evtCounter, 17)
-	testContains(t, ts.rsp.reqBody, `{"format":"json49"},"samplerate":3,`)
+	assert.Equal(t, ts.rsp.evtCounter, 17)
+	assert.Contains(t, ts.rsp.reqBody, `{"format":"json49"},"samplerate":3,`)
 }
 
 func TestReadFromOffset(t *testing.T) {
@@ -450,8 +447,8 @@ func TestReadFromOffset(t *testing.T) {
 	defer osf.Close()
 	fmt.Fprintf(osf, `{"INode":%d,"Offset":38}`, logStat.Ino)
 	run(opts)
-	testEquals(t, ts.rsp.reqCounter, 1)
-	testEquals(t, ts.rsp.evtCounter, 8)
+	assert.Equal(t, ts.rsp.reqCounter, 1)
+	assert.Equal(t, ts.rsp.evtCounter, 8)
 }
 
 // boilerplate to spin up a httptest server, create tmpdir, etc.
@@ -531,52 +528,4 @@ func (r *responder) reset() {
 	r.reqCounter = 0
 	r.evtCounter = 0
 	r.responseCode = 200
-}
-
-// helper function
-func testEquals(t testing.TB, actual, expected interface{}, msg ...string) {
-	if !reflect.DeepEqual(actual, expected) {
-		message := strings.Join(msg, ", ")
-		_, file, line, _ := runtime.Caller(1)
-
-		t.Errorf(
-			"%s:%d: %s -- actual(%T): %v, expected(%T): %v",
-			filepath.Base(file),
-			line,
-			message,
-			testDeref(actual),
-			testDeref(actual),
-			testDeref(expected),
-			testDeref(expected),
-		)
-	}
-}
-func testContains(t testing.TB, actual, expected string, msg ...string) {
-	if !strings.Contains(actual, expected) {
-		message := strings.Join(msg, ", ")
-		_, file, line, _ := runtime.Caller(1)
-
-		t.Errorf(
-			"%s:%d: %s -- actual: %s, expected substring: %s",
-			filepath.Base(file),
-			line,
-			message,
-			actual,
-			expected,
-		)
-	}
-}
-func testDeref(v interface{}) interface{} {
-	switch t := v.(type) {
-	case *string:
-		return fmt.Sprintf("*(%v)", *t)
-	case *int64:
-		return fmt.Sprintf("*(%v)", *t)
-	case *float64:
-		return fmt.Sprintf("*(%v)", *t)
-	case *bool:
-		return fmt.Sprintf("*(%v)", *t)
-	default:
-		return v
-	}
 }
