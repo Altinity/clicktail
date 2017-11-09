@@ -1,6 +1,7 @@
 package tail
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -36,7 +37,7 @@ func TestTailSingleFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines := tailSingleFile(tailer, filename, statefilename, ts.abort)
+	lines := tailSingleFile(ts.ctx, tailer, filename, statefilename)
 	checkLinesChan(t, lines, jsonLines)
 }
 
@@ -49,7 +50,7 @@ func TestTailSTDIN(t *testing.T) {
 		Paths:   make([]string, 1),
 	}
 	conf.Paths[0] = "-"
-	lineChans, err := GetEntries(conf, ts.abort)
+	lineChans, err := GetEntries(ts.ctx, conf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +83,7 @@ func TestGetSampledEntries(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetSampledEntries(conf, 2, ts.abort)
+	chanArr, err := GetSampledEntries(ts.ctx, conf, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +126,7 @@ func TestGetEntries(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetEntries(conf, ts.abort)
+	chanArr, err := GetEntries(ts.ctx, conf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +146,7 @@ func TestGetEntries(t *testing.T) {
 			StateFile: fn1,
 		},
 	}
-	nilChan, err := GetEntries(conf, ts.abort)
+	nilChan, err := GetEntries(ts.ctx, conf)
 	if nilChan != nil {
 		t.Error("errored getEntries was supposed to respond with a nil channel list")
 	}
@@ -182,13 +183,13 @@ func TestAbortChannel(t *testing.T) {
 		ts.writeFile(t, filename, strings.Join(jsonLines[i], "\n"))
 	}
 
-	chanArr, err := GetEntries(conf, ts.abort)
+	chanArr, err := GetEntries(ts.ctx, conf)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// ok, let's see what happens when we want to quit
-	close(ts.abort)
+	ts.cancel()
 	for _, ch := range chanArr {
 		checkLinesChanClosed(t, ch)
 	}
@@ -277,7 +278,8 @@ func TestGetStateFile(t *testing.T) {
 // to create an environment in which to run these tests
 type testSetup struct {
 	tmpdir string
-	abort  chan struct{}
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func (ts *testSetup) start(t *testing.T) {
@@ -287,7 +289,7 @@ func (ts *testSetup) start(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts.tmpdir = tmpdir
-	ts.abort = make(chan struct{})
+	ts.ctx, ts.cancel = context.WithCancel(context.Background())
 }
 
 func (ts *testSetup) writeFile(t *testing.T, path string, body string) {
