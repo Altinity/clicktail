@@ -73,6 +73,7 @@ func TestProcessLines(t *testing.T) {
 		}
 	}
 }
+
 func TestProcessLinesNoPreReg(t *testing.T) {
 	t1, _ := time.ParseInLocation(commonLogFormatTimeLayout, "08/Oct/2015:00:26:26 +0000", time.UTC)
 	tlm := []testLineMaps{

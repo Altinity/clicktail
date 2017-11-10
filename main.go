@@ -23,6 +23,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
 	"github.com/honeycombio/honeytail/parsers/postgresql"
+	"github.com/honeycombio/honeytail/parsers/regex"
 	"github.com/honeycombio/honeytail/tail"
 )
 
@@ -40,6 +41,7 @@ var validParsers = []string{
 	"mysql",
 	"nginx",
 	"postgresql",
+	"regex",
 }
 
 // GlobalOptions has all the top level CLI flags that honeytail supports
@@ -86,6 +88,7 @@ type GlobalOptions struct {
 	MySQL      mysql.Options      `group:"MySQL Parser Options" namespace:"mysql"`
 	Nginx      nginx.Options      `group:"Nginx Parser Options" namespace:"nginx"`
 	PostgreSQL postgresql.Options `group:"PostgreSQL Parser Options" namespace:"postgresql"`
+	Regex      regex.Options      `group:"Regex Parser Options" namespace:"regex"`
 }
 
 type RequiredOptions struct {
