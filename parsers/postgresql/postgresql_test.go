@@ -2,6 +2,7 @@ package postgresql
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ func TestSingleQueryParsing(t *testing.T) {
 	}{
 		{
 			description: "parse a multiline log statement from a default postgres 9.5 log",
-			in: `2017-11-07 00:05:16 UTC [3053-3] postgres@postgres LOG:  duration: 0.681 ms  statement: SELECT d.datname as "Name",
+			in: `2017-11-07 23:05:16 UTC [3053-3] postgres@postgres LOG:  duration: 0.681 ms  statement: SELECT d.datname as "Name",
 	       pg_catalog.pg_get_userbyid(d.datdba) as "Owner",
 	       pg_catalog.pg_encoding_to_char(d.encoding) as "Encoding",
 	       d.datcollate as "Collate",
@@ -29,7 +30,7 @@ func TestSingleQueryParsing(t *testing.T) {
 	ORDER BY 1;`,
 			prefixFormat: "%t [%p-%l] %u@%d",
 			expected: event.Event{
-				Timestamp: time.Date(2017, 11, 7, 0, 5, 16, 0, time.UTC),
+				Timestamp: time.Date(2017, 11, 7, 23, 5, 16, 0, time.UTC),
 				Data: map[string]interface{}{
 					"user":     "postgres",
 					"database": "postgres",
@@ -88,7 +89,9 @@ func TestSingleQueryParsing(t *testing.T) {
 			out := make(chan event.Event)
 			p := Parser{}
 			p.Init(&Options{LogLinePrefix: tc.prefixFormat})
-			go p.handleEvents(in, out)
+			wg := &sync.WaitGroup{}
+			wg.Add(1)
+			go p.handleEvents(in, out, wg)
 			in <- strings.Split(tc.in, "\n")
 			close(in)
 			got := <-out

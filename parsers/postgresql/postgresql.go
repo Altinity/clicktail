@@ -54,6 +54,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -125,7 +126,9 @@ func (p *Parser) Init(options interface{}) (err error) {
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	rawEvents := make(chan []string)
-	go p.handleEvents(rawEvents, send)
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go p.handleEvents(rawEvents, send, wg)
 	var groupedLines []string
 	for line := range lines {
 		if prefixRegex != nil {
@@ -150,12 +153,14 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 
 	rawEvents <- groupedLines
 	close(rawEvents)
+	wg.Wait()
 }
 
 // handleEvents receives sets of grouped log lines, each representing a single
 // log statement. It attempts to parse them, and sends the events it constructs
 // down the send channel.
-func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event) {
+func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event, wg *sync.WaitGroup) {
+	defer wg.Done()
 	// TODO: spin up a group of goroutines to do this
 	for rawEvent := range rawEvents {
 		ev := p.handleEvent(rawEvent)
@@ -242,7 +247,7 @@ func addFieldsToEvent(fields map[string]string, ev *event.Event) {
 				ev.Data[k] = v
 			}
 		case "timestamp", "timestamp_millis":
-			if timestamp, err := time.Parse("2006-01-02 03:04:05.999 MST", v); err == nil {
+			if timestamp, err := time.Parse("2006-01-02 15:04:05.999 MST", v); err == nil {
 				ev.Timestamp = timestamp
 			} else {
 				logrus.WithField("timestamp", v).WithError(err).Debug("Error parsing query timestamp")
