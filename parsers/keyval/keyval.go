@@ -168,13 +168,3 @@ func allEmpty(pl map[string]interface{}) bool {
 	// we've gone through the entire map and every field value has matched ""
 	return true
 }
-
-type NoopLineParser struct {
-	incomingLine string
-	outgoingMap  map[string]interface{}
-}
-
-func (n *NoopLineParser) ParseLine(line string) (map[string]interface{}, error) {
-	n.incomingLine = line
-	return n.outgoingMap, nil
-}

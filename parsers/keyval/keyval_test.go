@@ -2,7 +2,6 @@ package keyval
 
 import (
 	"reflect"
-	"regexp"
 	"sync"
 	"testing"
 
@@ -68,14 +67,6 @@ func TestBrokenFilterRegex(t *testing.T) {
 }
 
 func TestFilterRegex(t *testing.T) {
-	p := &Parser{
-		conf: Options{
-			NumParsers: 5,
-		},
-		lineParser: &NoopLineParser{
-			outgoingMap: map[string]interface{}{"key": "val"},
-		},
-	}
 	tsts := []struct {
 		filterString   string
 		invertFilter   bool
@@ -86,9 +77,9 @@ func TestFilterRegex(t *testing.T) {
 			"aaaa",
 			false,
 			[]string{
-				"line one",
-				"line two aoeu",
-				"line three",
+				"key=val",
+				"key=val",
+				"key=val",
 			},
 			0, // no lines have 'aaaa'
 		},
@@ -96,9 +87,9 @@ func TestFilterRegex(t *testing.T) {
 			"aaaa",
 			true,
 			[]string{
-				"line one",
-				"line two aoeu",
-				"line three",
+				"key=val",
+				"key=val",
+				"key=val",
 			},
 			3, // all lines don't have 'aaaa'
 		},
@@ -106,9 +97,9 @@ func TestFilterRegex(t *testing.T) {
 			"aoeu",
 			false,
 			[]string{
-				"line one",
-				"line two aoeu",
-				"line three",
+				"key=val",
+				"key=val aoeu",
+				"key=val",
 			},
 			1, // only line two has 'aoeu'
 		},
@@ -116,16 +107,20 @@ func TestFilterRegex(t *testing.T) {
 			"aoeu",
 			true,
 			[]string{
-				"line one",
-				"line two aoeu",
-				"line three",
+				"key=val",
+				"key=val aoeu",
+				"key=val",
 			},
 			2, // lines one and three don't have 'aoeu'
 		},
 	}
 	for _, tst := range tsts {
-		p.filterRegex = regexp.MustCompile(tst.filterString)
-		p.conf.InvertFilter = tst.invertFilter
+		p := &Parser{}
+		p.Init(&Options{
+			NumParsers:   5,
+			FilterRegex:  tst.filterString,
+			InvertFilter: tst.invertFilter,
+		})
 		lines := make(chan string)
 		send := make(chan event.Event)
 		// send input into lines in a goroutine then close the lines channel
@@ -155,12 +150,8 @@ func TestFilterRegex(t *testing.T) {
 }
 
 func TestDontReturnEmptyEvents(t *testing.T) {
-	p := &Parser{
-		lineParser: &NoopLineParser{},
-		conf: Options{
-			NumParsers: 5,
-		},
-	}
+	p := &Parser{}
+	p.Init(&Options{})
 	lines := make(chan string)
 	send := make(chan event.Event)
 	// send input into lines in a goroutine then close the lines channel
@@ -191,19 +182,13 @@ func TestDontReturnEmptyEvents(t *testing.T) {
 // TestDontReturnUselessEvents a useless event is one with all keys and no
 // values
 func TestDontReturnUselessEvents(t *testing.T) {
-	p := &Parser{
-		lineParser: &NoopLineParser{
-			outgoingMap: map[string]interface{}{
-				"key": "",
-				"k2":  "",
-			},
-		},
-	}
+	p := &Parser{}
+	p.Init(&Options{})
 	lines := make(chan string)
 	send := make(chan event.Event)
 	// send input into lines in a goroutine then close the lines channel
 	go func() {
-		for _, line := range []string{"one", "two", "three"} {
+		for _, line := range []string{"key=", "key2=", "key= key2="} {
 			lines <- line
 		}
 		close(lines)
