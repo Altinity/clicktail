@@ -13,6 +13,7 @@ Our complete list of parsers can be found in the [`parsers/` directory](parsers/
 - [ArangoDB](parsers/arangodb/)
 - [MongoDB](parsers/mongodb/)
 - [MySQL](parsers/mysql/)
+- [PostgreSQL](parsers/postgresql/)
 - [nginx](parsers/nginx/)
 
 ## Installation
