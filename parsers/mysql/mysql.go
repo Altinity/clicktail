@@ -320,6 +320,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 	var foundStatement bool
 	groupedLines := make([]string, 0, 5)
 	for line := range lines {
+		line = strings.TrimSpace(line)
 		// mysql parser does not support capturing fields in the line prefix - just
 		// strip it.
 		if prefixRegex != nil {

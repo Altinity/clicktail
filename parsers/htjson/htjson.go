@@ -53,6 +53,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 		wg.Add(1)
 		go func() {
 			for line := range lines {
+				line = strings.TrimSpace(line)
 				logrus.WithFields(logrus.Fields{
 					"line": line,
 				}).Debug("Attempting to process json log line")

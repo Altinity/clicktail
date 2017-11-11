@@ -204,7 +204,7 @@ func tailSingleFile(ctx context.Context, tailer *tail.Tail, file string, stateFi
 					// skip errored lines
 					continue
 				}
-				lines <- strings.TrimSpace(line.Text)
+				lines <- line.Text
 			case <-ctx.Done():
 				// will only trigger when the context is cancelled
 				break ReadLines
