@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/parsers"
 )
@@ -29,7 +31,7 @@ var testInitCases = []testInitMap{
 			NumParsers:      5,
 			TimeFieldName:   "local_time",
 			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
-			LineRegex:       `(?P<foo>[A-Za-z]+)`,
+			LineRegex:       []string{`(?P<foo>[A-Za-z]+)`},
 		},
 	},
 	{
@@ -38,7 +40,7 @@ var testInitCases = []testInitMap{
 			NumParsers:      5,
 			TimeFieldName:   "local_time",
 			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
-			LineRegex:       ``, // Empty regex should fail
+			LineRegex:       []string{``}, // Empty regex should fail
 		},
 	},
 	{
@@ -47,25 +49,40 @@ var testInitCases = []testInitMap{
 			NumParsers:      5,
 			TimeFieldName:   "local_time",
 			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
-			LineRegex:       `(?P<foo>[A-Za-`, // Broken regex should fail
+			LineRegex:       []string{`(?P<foo>[A-Za-`}, // Broken regex should fail
 		},
 	},
 	{
 		expectedPass: false,
 		options: &Options{
-			NumParsers:      5,
-			TimeFieldName:   "local_time",
-			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
-			LineRegex:       `[a-z]+`, // Require at least one named group
+			NumParsers: 5,
+			LineRegex:  []string{`[a-z]+`}, // Require at least one named group
 		},
 	},
 	{
 		expectedPass: false,
 		options: &Options{
-			NumParsers:      5,
-			TimeFieldName:   "local_time",
-			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
-			LineRegex:       `(?P[a-z]+)`, // Require at least one named group
+			NumParsers: 5,
+			LineRegex:  []string{`(?P[a-z]+)`}, // Require at least one named group
+		},
+	},
+	{
+		expectedPass: true,
+		options: &Options{
+			NumParsers: 5,
+			LineRegex: []string{ // Take in multiple regexes
+				`\[(?P<word1>\w+)\]`,
+				`(?P<dummy>banana)`,
+			},
+		},
+	},
+	{
+		expectedPass: false,
+		options: &Options{
+			NumParsers: 5,
+			LineRegex: []string{
+				`[(?P<word1>\w+)]`, // Invalid -- brackets need to be escaped
+			},
 		},
 	},
 }
@@ -89,16 +106,18 @@ func TestInit(t *testing.T) {
 // Test cases for RegexLineParser.ParseLine
 
 type testLineMap struct {
-	lineRegex string
-	input     string
-	expected  map[string]interface{}
+	lineRegexes []string
+	input       string
+	expected    map[string]interface{}
 }
 
 var tlms = []testLineMap{
 	{
 		// Simple word parsing
-		lineRegex: `(?P<word1>\w+) (?P<word2>\w+) (?P<word3>\w+)`,
-		input:     `apple banana orange`,
+		lineRegexes: []string{
+			`(?P<word1>\w+) (?P<word2>\w+) (?P<word3>\w+)`,
+		},
+		input: `apple banana orange`,
 		expected: map[string]interface{}{
 			"word1": "apple",
 			"word2": "banana",
@@ -106,9 +125,19 @@ var tlms = []testLineMap{
 		},
 	},
 	{
+		// Matches no lines
+		lineRegexes: []string{
+			`(?P<word1>[a-zA-Z]+)`,
+		},
+		input:    `123456 654321`,
+		expected: map[string]interface{}{},
+	},
+	{
 		// Simple time parsing
-		lineRegex: `(?P<Year>\d{4})-(?P<Month>\d{2})-(?P<Day>\d{2})`,
-		input:     `2017-01-30 1980-01-02`, // Ignore the second date
+		lineRegexes: []string{
+			`(?P<Year>\d{4})-(?P<Month>\d{2})-(?P<Day>\d{2})`,
+		},
+		input: `2017-01-30 1980-01-02`, // Ignore the second date
 		expected: map[string]interface{}{
 			"Year":  "2017",
 			"Month": "01",
@@ -117,8 +146,10 @@ var tlms = []testLineMap{
 	},
 	{
 		// Fields containing whitespace
-		lineRegex: `\[(?P<BracketedField>[0-9A-Za-z\s]+)\] (?P<UnbracketedField>[0-9A-Za-z]+)`,
-		input:     `[some value] unbracketed`,
+		lineRegexes: []string{
+			`\[(?P<BracketedField>[0-9A-Za-z\s]+)\] (?P<UnbracketedField>[0-9A-Za-z]+)`,
+		},
+		input: `[some value] unbracketed`,
 		expected: map[string]interface{}{
 			"BracketedField":   "some value",
 			"UnbracketedField": "unbracketed",
@@ -126,8 +157,10 @@ var tlms = []testLineMap{
 	},
 	{
 		// Nested regex grouping
-		lineRegex: `(?P<outer>[^ ]* (?P<inner1>[^ ]*) (?P<inner2>[^ ]*))`,
-		input:     `foo bar baz`,
+		lineRegexes: []string{
+			`(?P<outer>[^ ]* (?P<inner1>[^ ]*) (?P<inner2>[^ ]*))`,
+		},
+		input: `foo bar baz`,
 		expected: map[string]interface{}{
 			"outer":  "foo bar baz",
 			"inner1": "bar",
@@ -136,30 +169,53 @@ var tlms = []testLineMap{
 	},
 	{
 		// Sample nginx error log line
-		lineRegex: `(?P<time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<status>.*)\].* request: "(?P<request>[^"]*)"`,
-		input:     `2017/11/07 22:59:46 [error] 5812#0: *777536449 connect() failed (111: Connection refused) while connecting to upstream, client: 127.0.0.1, server: localhost, request: "GET /isbns HTTP/1.1", upstream: "http://127.0.0.1:8080/isbns", host: "localhost"`,
+		lineRegexes: []string{
+			`(?P<time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<status>.*)\].* request: "(?P<request>[^"]*)"`,
+		},
+		input: `2017/11/07 22:59:46 [error] 5812#0: *777536449 connect() failed (111: Connection refused) while connecting to upstream, client: 127.0.0.1, server: localhost, request: "GET /isbns HTTP/1.1", upstream: "http://127.0.0.1:8080/isbns", host: "localhost"`,
 		expected: map[string]interface{}{
 			"time":    "2017/11/07 22:59:46",
 			"status":  "error",
 			"request": "GET /isbns HTTP/1.1",
 		},
 	},
+	{
+		// Multi-regex parsing
+		lineRegexes: []string{
+			`(?P<word1>\w+) (?P<word2>\w+) (?P<word3>\w+)`,
+			`(?P<dummy>banana)`,
+		},
+		input: `apple banana orange`, // Should match to first regex
+		expected: map[string]interface{}{
+			"word1": "apple",
+			"word2": "banana",
+			"word3": "orange",
+		},
+	},
+	{
+		// Multi-regex parsing
+		lineRegexes: []string{
+			`\[(?P<word1>\w+)\]`,
+			`(?P<dummy>banana)`,
+		},
+		input: `apple banana orange`, // Should match to second regex
+		expected: map[string]interface{}{
+			"dummy": "banana",
+		},
+	},
 }
 
 func TestParseLine(t *testing.T) {
-	p := &Parser{
-		conf: Options{
-			NumParsers: 5,
-		},
-		lineParser: &RegexLineParser{regexp.MustCompile(``)},
-	}
 	for _, tlm := range tlms {
-		p.lineParser = &RegexLineParser{regexp.MustCompile(tlm.lineRegex)}
+		p := &Parser{}
+		err := p.Init(&Options{
+			NumParsers: 5,
+			LineRegex:  tlm.lineRegexes,
+		})
+		assert.NoError(t, err, "Could not instantiate parser with regexes: %v", tlm.lineRegexes)
 		resp, err := p.lineParser.ParseLine(tlm.input)
 		t.Logf("%+v", resp)
-		if err != nil {
-			t.Error("p.ParseLine unexpectedly returned error ", err)
-		}
+		assert.NoError(t, err, "p.ParseLine unexpectedly returned error %v", err)
 		if !reflect.DeepEqual(resp, tlm.expected) {
 			t.Errorf("response %+v didn't match expected %+v", resp, tlm.expected)
 		}
@@ -190,18 +246,17 @@ func TestProcessLines(t *testing.T) {
 			},
 		},
 	}
-	lineRegex, err := regexp.Compile(`(?P<http_x_forwarded_proto>\w+) - (?P<remote_addr>\d{1,4}\.\d{1,4}\.\d{1,4}\.\d{1,4}) - - \[(?P<local_time>\d{2}\/[A-Za-z]+\/\d{4}:\d{2}:\d{2}:\d{2}.*)\]`)
-	if err != nil {
-		t.Errorf("couldnt parse regex")
-	}
-	p := &Parser{
-		conf: Options{
-			NumParsers:      5,
-			TimeFieldName:   "local_time",
-			TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
+	p := &Parser{}
+	err := p.Init(&Options{
+		NumParsers:      5,
+		TimeFieldName:   "local_time",
+		TimeFieldFormat: "%d/%b/%Y:%H:%M:%S %z",
+		LineRegex: []string{
+			`(?P<http_x_forwarded_proto>\w+) - (?P<remote_addr>\d{1,4}\.\d{1,4}\.\d{1,4}\.\d{1,4}) - - \[(?P<local_time>\d{2}\/[A-Za-z]+\/\d{4}:\d{2}:\d{2}:\d{2}.*)\]`,
 		},
-		lineParser: &RegexLineParser{lineRegex},
-	}
+	})
+	assert.NoError(t, err, "Couldn't instantiate Parser")
+
 	lines := make(chan string)
 	send := make(chan event.Event)
 	go func() {
