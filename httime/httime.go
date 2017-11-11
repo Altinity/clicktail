@@ -1,6 +1,7 @@
 package httime
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -10,7 +11,7 @@ import (
 
 const (
 	StrftimeChar     = "%"
-	UnixTimestampFmt = "%s"
+	UnixTimestampFmt = "%s(%L)?"
 )
 
 var (
@@ -162,8 +163,8 @@ func Parse(format, timespec string) (time.Time, error) {
 // convertTimeFormat tries to handle C-style time formats alongside Go's
 // existing time.Parse behavior.
 func convertTimeFormat(layout string) string {
-	for fmt, conv := range convertMapping {
-		layout = strings.Replace(layout, fmt, conv, -1)
+	for format, conv := range convertMapping {
+		layout = strings.Replace(layout, format, conv, -1)
 	}
 	return layout
 }
@@ -176,6 +177,16 @@ func tryTimeFormats(t, intendedFormat string) time.Time {
 	if intendedFormat == UnixTimestampFmt {
 		if unix, err := strconv.ParseInt(t, 0, 64); err == nil {
 			return time.Unix(unix, 0)
+		}
+		// millis
+		if unix, err := strconv.ParseFloat(t, 64); err == nil {
+			splitStr := strings.Split(t, ".")
+			if len(splitStr) == 2 && len(splitStr[1]) == 3 {
+				floatPart, err := strconv.ParseInt(splitStr[1], 10, 64)
+				if err == nil {
+					return time.Unix(int64(math.Trunc(unix)), floatPart*int64(time.Millisecond))
+				}
+			}
 		}
 	}
 	if intendedFormat != "" {

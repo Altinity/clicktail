@@ -130,6 +130,14 @@ var tts = []testTimestamp{
 		tz:        utc,
 		expected:  time.Unix(1440116565, 0),
 	},
+	// millis
+	{
+		format:    UnixTimestampFmt,
+		fieldName: "time",
+		input:     "1440116565.123",
+		tz:        utc,
+		expected:  time.Unix(1440116565, 123000000),
+	},
 	{
 		format:    "%Y-%m-%d %z",
 		input:     "2014-04-10 -0700",
