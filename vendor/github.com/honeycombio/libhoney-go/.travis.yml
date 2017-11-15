@@ -4,3 +4,6 @@ dist: trusty
 
 go:
         - 1.6
+
+script:
+        - go test ./... -race -v

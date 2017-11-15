@@ -9,8 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"net/url"
+	"path"
 	"reflect"
 	"sort"
 	"strings"
@@ -27,16 +30,16 @@ func init() {
 const (
 	defaultSampleRate = 1
 	defaultAPIHost    = "https://api.honeycomb.io/"
-	version           = "1.3.0"
+	version           = "1.4.0"
 
-	// defaultmaxBatchSize how many events to collect in a batch
-	defaultmaxBatchSize = 50
-	// defaultbatchTimeout how frequently to send unfilled batches
-	defaultbatchTimeout = 100 * time.Millisecond
-	// defaultmaxConcurrentBatches how many batches to maintain in parallel
-	defaultmaxConcurrentBatches = 80
-	// defaultpendingWorkCapacity how many events to queue up for busy batches
-	defaultpendingWorkCapacity = 10000
+	// DefaultMaxBatchSize how many events to collect in a batch
+	DefaultMaxBatchSize = 50
+	// DefaultBatchTimeout how frequently to send unfilled batches
+	DefaultBatchTimeout = 100 * time.Millisecond
+	// DefaultMaxConcurrentBatches how many batches to maintain in parallel
+	DefaultMaxConcurrentBatches = 80
+	// DefaultPendingWorkCapacity how many events to queue up for busy batches
+	DefaultPendingWorkCapacity = 10000
 )
 
 var (
@@ -45,12 +48,12 @@ var (
 
 // globals to support default/singleton-like behavior
 var (
-	tx     txClient
+	tx     Output
 	txOnce sync.Once
 
 	blockOnResponses = false
 	sd, _            = statsd.New(statsd.Mute(true)) // init working default, to be overridden
-	responses        = make(chan Response, 2*defaultpendingWorkCapacity)
+	responses        = make(chan Response, 2*DefaultPendingWorkCapacity)
 	defaultBuilder   = &Builder{
 		APIHost:    defaultAPIHost,
 		SampleRate: defaultSampleRate,
@@ -106,18 +109,64 @@ type Config struct {
 	// channel it will be ok.
 	BlockOnResponse bool
 
+	// Output allows you to override what happens to events after you call
+	// Send() on them. By default, events are asynchronously sent to the
+	// Honeycomb API. You can use the MockOutput included in this package in
+	// unit tests, or use the WriterOutput to write events to STDOUT or to a
+	// file when developing locally.
+	Output Output
+
 	// Configuration for the underlying sender. It is safe (and recommended) to
 	// leave these values at their defaults. You cannot change these values
 	// after calling Init()
-	MaxBatchSize         uint          // how many events to collect into a batch before sending
-	SendFrequency        time.Duration // how often to send off batches
-	MaxConcurrentBatches uint          // how many batches can be inflight simultaneously
-	PendingWorkCapacity  uint          // how many events to allow to pile up
+	MaxBatchSize         uint          // how many events to collect into a batch before sending. Overrides DefaultMaxBatchSize.
+	SendFrequency        time.Duration // how often to send off batches. Overrides DefaultBatchTimeout.
+	MaxConcurrentBatches uint          // how many batches can be inflight simultaneously. Overrides DefaultMaxConcurrentBatches.
+	PendingWorkCapacity  uint          // how many events to allow to pile up. Overrides DefaultPendingWorkCapacity
 
 	// Transport can be provided to the http.Client attempting to talk to
 	// Honeycomb servers. Intended for use in tests in order to assert on
 	// expected behavior.
 	Transport http.RoundTripper
+}
+
+// VerifyWriteKey calls out to the Honeycomb API to validate the write key, so
+// we can exit immediately if desired instead of happily sending events that
+// are all rejected.
+func VerifyWriteKey(config Config) error {
+	if config.WriteKey == "" {
+		return errors.New("Write key is empty")
+	}
+	if config.APIHost == "" {
+		config.APIHost = defaultAPIHost
+	}
+	u, err := url.Parse(config.APIHost)
+	if err != nil {
+		return fmt.Errorf("Error parsing API URL: %s", err)
+	}
+	u.Path = path.Join(u.Path, "1", "team_slug")
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", UserAgentAddition)
+	req.Header.Add("X-Honeycomb-Team", config.WriteKey)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return errors.New("Write key provided is invalid")
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return fmt.Errorf(`Abnormal non-200 response verifying Honeycomb write key: %d
+Response body: %s`, resp.StatusCode, string(body))
+	}
+
+	return nil
 }
 
 // Event is used to hold data that can be sent to Honeycomb. It can also
@@ -146,7 +195,9 @@ type Event struct {
 // Marshaling an Event for batching up to the Honeycomb servers. Omits fields
 // that aren't specific to this particular event, and allows for behavior like
 // omitempty'ing a zero'ed out time.Time.
-func (e Event) MarshalJSON() ([]byte, error) {
+func (e *Event) MarshalJSON() ([]byte, error) {
+	e.lock.RLock()
+	defer e.lock.RUnlock()
 	tPointer := &(e.Timestamp)
 	if e.Timestamp.IsZero() {
 		tPointer = nil
@@ -159,9 +210,9 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(struct {
-		Data       map[string]interface{} `json:"data"`
-		SampleRate uint                   `json:"samplerate,omitempty"`
-		Timestamp  *time.Time             `json:"time,omitempty"`
+		Data       marshallableMap `json:"data"`
+		SampleRate uint            `json:"samplerate,omitempty"`
+		Timestamp  *time.Time      `json:"time,omitempty"`
 	}{e.data, sampleRate, tPointer})
 }
 
@@ -182,12 +233,12 @@ type Builder struct {
 
 	// any dynamic fields to apply to each generated event
 	dynFields     []dynamicField
-	dynFieldsLock sync.Mutex
+	dynFieldsLock sync.RWMutex
 }
 
 type fieldHolder struct {
 	data marshallableMap
-	lock sync.Mutex
+	lock sync.RWMutex
 }
 
 // Wrapper type for custom JSON serialization: individual values that can't be
@@ -268,31 +319,34 @@ func Init(config Config) error {
 		config.APIHost = defaultAPIHost
 	}
 	if config.MaxBatchSize == 0 {
-		config.MaxBatchSize = defaultmaxBatchSize
+		config.MaxBatchSize = DefaultMaxBatchSize
 	}
 	if config.SendFrequency == 0 {
-		config.SendFrequency = defaultbatchTimeout
+		config.SendFrequency = DefaultBatchTimeout
 	}
 	if config.MaxConcurrentBatches == 0 {
-		config.MaxConcurrentBatches = defaultmaxConcurrentBatches
+		config.MaxConcurrentBatches = DefaultMaxConcurrentBatches
 	}
 	if config.PendingWorkCapacity == 0 {
-		config.PendingWorkCapacity = defaultpendingWorkCapacity
+		config.PendingWorkCapacity = DefaultPendingWorkCapacity
 	}
 
 	blockOnResponses = config.BlockOnResponse
 
-	// reset the global transmission
-	tx = &txDefaultClient{
-		maxBatchSize:         config.MaxBatchSize,
-		batchTimeout:         config.SendFrequency,
-		maxConcurrentBatches: config.MaxConcurrentBatches,
-		pendingWorkCapacity:  config.PendingWorkCapacity,
-		blockOnSend:          config.BlockOnSend,
-		blockOnResponses:     config.BlockOnResponse,
-		transport:            config.Transport,
+	if config.Output == nil {
+		// reset the global transmission
+		tx = &txDefaultClient{
+			maxBatchSize:         config.MaxBatchSize,
+			batchTimeout:         config.SendFrequency,
+			maxConcurrentBatches: config.MaxConcurrentBatches,
+			pendingWorkCapacity:  config.PendingWorkCapacity,
+			blockOnSend:          config.BlockOnSend,
+			blockOnResponses:     config.BlockOnResponse,
+			transport:            config.Transport,
+		}
+	} else {
+		tx = config.Output
 	}
-
 	if err := tx.Start(); err != nil {
 		return err
 	}
@@ -469,6 +523,13 @@ func (f *fieldHolder) AddFunc(fn func() (string, interface{}, error)) error {
 	return nil
 }
 
+// Fields returns a reference to the map of fields that have been added to an
+// event. Caution: it is not safe to manipulate the returned map concurrently
+// with calls to AddField, Add or AddFunc.
+func (f *fieldHolder) Fields() map[string]interface{} {
+	return f.data
+}
+
 // Send dispatches the event to be sent to Honeycomb, sampling if necessary.
 //
 // If you have sampling enabled
@@ -502,6 +563,8 @@ func (e *Event) Send() error {
 // return an error.  Required fields are APIHost, WriteKey, and Dataset. Values
 // specified in an Event override Config.
 func (e *Event) SendPresampled() error {
+	e.lock.RLock()
+	defer e.lock.RUnlock()
 	if len(e.data) == 0 {
 		return errors.New("No metrics added to event. Won't send empty event.")
 	}
@@ -518,10 +581,10 @@ func (e *Event) SendPresampled() error {
 	txOnce.Do(func() {
 		if tx == nil {
 			tx = &txDefaultClient{
-				maxBatchSize:         defaultmaxBatchSize,
-				batchTimeout:         defaultbatchTimeout,
-				maxConcurrentBatches: defaultmaxConcurrentBatches,
-				pendingWorkCapacity:  defaultpendingWorkCapacity,
+				maxBatchSize:         DefaultMaxBatchSize,
+				batchTimeout:         DefaultBatchTimeout,
+				maxConcurrentBatches: DefaultMaxConcurrentBatches,
+				pendingWorkCapacity:  DefaultPendingWorkCapacity,
 			}
 			tx.Start()
 		}
@@ -550,11 +613,6 @@ func sendDroppedResponse(e *Event, message string) {
 // returns true if the sample should be dropped
 func shouldDrop(rate uint) bool {
 	return rand.Intn(int(rate)) != 0
-}
-
-// returns true if the first character of the string is lowercase
-func isFirstLower(s string) bool {
-	return false
 }
 
 // NewBuilder creates a new event builder. The builder inherits any
@@ -601,11 +659,14 @@ func (b *Builder) NewEvent() *Event {
 	}
 	e.data = make(map[string]interface{})
 
-	// copy static metrics (everything's been serialized so flat copy is OK)
+	b.lock.RLock()
+	defer b.lock.RUnlock()
 	for k, v := range b.data {
 		e.data[k] = v
 	}
 	// create dynamic metrics
+	b.dynFieldsLock.RLock()
+	defer b.dynFieldsLock.RUnlock()
 	for _, dynField := range b.dynFields {
 		e.AddField(dynField.name, dynField.fn())
 	}
@@ -623,11 +684,14 @@ func (b *Builder) Clone() *Builder {
 		dynFields:  make([]dynamicField, 0, len(b.dynFields)),
 	}
 	newB.data = make(map[string]interface{})
-	// copy static metrics (everything's been serialized so flat copy is OK)
+	b.lock.RLock()
+	defer b.lock.RUnlock()
 	for k, v := range b.data {
 		newB.data[k] = v
 	}
 	// copy dynamic metric generators
+	b.dynFieldsLock.RLock()
+	defer b.dynFieldsLock.RUnlock()
 	for _, dynFd := range b.dynFields {
 		newB.dynFields = append(newB.dynFields, dynFd)
 	}
