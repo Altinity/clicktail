@@ -17,8 +17,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -27,10 +29,12 @@ import (
 	"github.com/facebookgo/muster"
 )
 
-type txClient interface {
+// Output is responsible for handling events after Send() is called.
+// Implementations of Add() must be safe for concurrent calls.
+type Output interface {
+	Add(ev *Event)
 	Start() error
 	Stop() error
-	Add(*Event)
 }
 
 type txDefaultClient struct {
@@ -90,32 +94,6 @@ func (t *txDefaultClient) Add(ev *Event) {
 			}
 		}
 	}
-}
-
-type txTestClient struct {
-	Timestamps  []time.Time
-	datas       [][]byte
-	sampleRates []uint
-}
-
-func (t *txTestClient) Start() error {
-	t.Timestamps = make([]time.Time, 0)
-	t.datas = make([][]byte, 0)
-	return nil
-}
-
-func (t *txTestClient) Stop() error {
-	return nil
-}
-
-func (t *txTestClient) Add(ev *Event) {
-	t.Timestamps = append(t.Timestamps, ev.Timestamp)
-	blob, err := json.Marshal(ev.data)
-	if err != nil {
-		panic(err)
-	}
-	t.datas = append(t.datas, blob)
-	t.sampleRates = append(t.sampleRates, ev.SampleRate)
 }
 
 // batchAgg is a batch aggregator - it's actually collecting what will
@@ -239,17 +217,9 @@ func (b *batchAgg) fireBatch(events []*Event) {
 	// if the entire HTTP POST failed, send a failed response for every event
 	if err != nil {
 		sd.Increment("send_errors")
-		for _, ev := range events {
-			// Pass the top-level send error down responses channel for each event
-			// that didn't already error during encoding
-			if ev != nil {
-				b.enqueueResponse(Response{
-					Duration: dur / time.Duration(numEncoded),
-					Metadata: ev.Metadata,
-					Err:      err,
-				})
-			}
-		}
+		// Pass the top-level send error down responses channel for each event
+		// that didn't already error during encoding
+		b.enqueueErrResponses(err, events, dur/time.Duration(numEncoded))
 		// the POST failed so we're done with this batch key's worth of events
 		return
 	}
@@ -259,21 +229,34 @@ func (b *batchAgg) fireBatch(events []*Event) {
 	sd.Count("messages_sent", numEncoded)
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		sd.Increment("send_errors")
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			b.enqueueErrResponses(fmt.Errorf("Got HTTP error code but couldn't read response body: %v", err),
+				events, dur/time.Duration(numEncoded))
+			return
+		}
+		for _, ev := range events {
+			if ev != nil {
+				b.enqueueResponse(Response{
+					StatusCode: resp.StatusCode,
+					Body:       body,
+					Duration:   dur / time.Duration(numEncoded),
+					Metadata:   ev.Metadata,
+				})
+			}
+		}
+		return
+	}
+
 	// decode the responses
 	batchResponses := []Response{}
 	err = json.NewDecoder(resp.Body).Decode(&batchResponses)
 	if err != nil {
 		// if we can't decode the responses, just error out all of them
 		sd.Increment("response_decode_errors")
-		for _, ev := range events {
-			if ev != nil {
-				b.enqueueResponse(Response{
-					Duration: dur,
-					Metadata: ev.Metadata,
-					Err:      err,
-				})
-			}
-		}
+		b.enqueueErrResponses(err, events, dur/time.Duration(numEncoded))
 		return
 	}
 
@@ -329,6 +312,18 @@ func (b *batchAgg) encodeBatch(events []*Event) ([]byte, int) {
 	return buf.Bytes(), numEncoded
 }
 
+func (b *batchAgg) enqueueErrResponses(err error, events []*Event, duration time.Duration) {
+	for _, ev := range events {
+		if ev != nil {
+			b.enqueueResponse(Response{
+				Err:      err,
+				Duration: duration,
+				Metadata: ev.Metadata,
+			})
+		}
+	}
+}
+
 // buildReqReader returns an io.Reader and a boolean, indicating whether or not
 // the io.Reader is gzip-compressed.
 func buildReqReader(jsonEncoded []byte) (io.Reader, bool) {
@@ -345,4 +340,50 @@ func buildReqReader(jsonEncoded []byte) (io.Reader, bool) {
 // nower to make testing easier
 type nower interface {
 	Now() time.Time
+}
+
+// WriterOutput implements the Output interface by marshalling events to JSON
+// and writing to STDOUT, or to the writer W if one is specified.
+type WriterOutput struct {
+	W io.Writer
+
+	sync.Mutex
+}
+
+func (w *WriterOutput) Start() error { return nil }
+func (w *WriterOutput) Stop() error  { return nil }
+
+func (w *WriterOutput) Add(ev *Event) {
+	w.Lock()
+	defer w.Unlock()
+	m, _ := ev.MarshalJSON()
+	m = append(m, '\n')
+	if w.W == nil {
+		w.W = os.Stdout
+	}
+	w.W.Write(m)
+}
+
+// MockOutput implements the Output interface by retaining a slice of added
+// events, for use in unit tests.
+type MockOutput struct {
+	events []*Event
+	sync.Mutex
+}
+
+func (m *MockOutput) Add(ev *Event) {
+	m.Lock()
+	m.events = append(m.events, ev)
+	m.Unlock()
+}
+
+func (m *MockOutput) Start() error { return nil }
+func (m *MockOutput) Stop() error  { return nil }
+
+func (m *MockOutput) Events() []*Event {
+	m.Lock()
+	defer m.Unlock()
+	output := make([]*Event, len(m.events))
+	copy(output, m.events)
+	return output
 }

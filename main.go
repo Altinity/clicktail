@@ -2,9 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -169,7 +167,13 @@ func main() {
 	addParserDefaultOptions(&options)
 	sanityCheckOptions(&options)
 
-	verifyWritekey(options.APIHost, options.Reqs.WriteKey)
+	if err := libhoney.VerifyWriteKey(libhoney.Config{
+		APIHost:  options.APIHost,
+		WriteKey: options.Reqs.WriteKey,
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, "Could not verify Honeycomb write key: ", err)
+		os.Exit(1)
+	}
 	run(options)
 }
 
@@ -317,29 +321,4 @@ Usage: honeytail -p <parser> -k <writekey> -f </path/to/logfile> -d <mydata> [op
 For even more detail on required and optional parameters, run
 honeytail --help
 `)
-}
-
-// verifyWritekey calls out to api to validate the writekey, so we can exit
-// immediately instead of happily sending events that are all rejected.
-func verifyWritekey(apiHost string, writeKey string) {
-	url := fmt.Sprintf("%s/1/team_slug", apiHost)
-	req, err := http.NewRequest("GET", url, nil)
-	req.Header.Set("User-Agent", libhoney.UserAgentAddition)
-	req.Header.Add("X-Honeycomb-Team", writeKey)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("Failed to validate your writekey:")
-		fmt.Println("\t", err)
-		fmt.Println("Sorry! Please try again.")
-		os.Exit(1)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		body, _ := ioutil.ReadAll(resp.Body)
-		fmt.Println("Failed to validate your writekey:")
-		fmt.Println("\t", string(body))
-		fmt.Println("Sorry! Please try again.")
-		os.Exit(1)
-	}
 }
