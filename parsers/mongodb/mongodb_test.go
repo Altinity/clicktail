@@ -8,7 +8,6 @@ import (
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
 	"github.com/honeycombio/honeytail/httime/httimetest"
-	"github.com/honeycombio/honeytail/parsers"
 )
 
 const (
@@ -420,10 +419,6 @@ func TestProcessLines(t *testing.T) {
 		conf: Options{
 			NumParsers: 5,
 		},
-	}
-	m.lineParsers = make([]parsers.LineParser, m.conf.NumParsers)
-	for i := 0; i < m.conf.NumParsers; i++ {
-		m.lineParsers[i] = &MongoLineParser{}
 	}
 	lines := make(chan string)
 	send := make(chan event.Event)

@@ -134,7 +134,7 @@ type Options struct {
 	Pass          string `long:"pass" description:"MySQL password"`
 	QueryInterval uint   `long:"interval" description:"interval for querying the MySQL DB in seconds" default:"30"`
 
-	NumParsers int `hidden:"true" description:"number of mongo parsers to spin up"`
+	NumParsers int `hidden:"true" description:"number of MySQL parsers to spin up"`
 }
 
 type Parser struct {
@@ -310,8 +310,6 @@ func isMySQLHeaderLine(line string) bool {
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// start up a goroutine to handle grouped sets of lines
 	rawEvents := make(chan []string)
-	var wg sync.WaitGroup
-	p.wg = wg
 	defer p.wg.Wait()
 	p.wg.Add(1)
 	go p.handleEvents(rawEvents, send)
@@ -361,7 +359,11 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 func (p *Parser) handleEvents(rawEvents <-chan []string, send chan<- event.Event) {
 	defer p.wg.Done()
 	wg := sync.WaitGroup{}
-	for i := 0; i < p.conf.NumParsers; i++ {
+	numParsers := 1
+	if p.conf.NumParsers > 0 {
+		numParsers = p.conf.NumParsers
+	}
+	for i := 0; i < numParsers; i++ {
 		ptp := perThreadParser{
 			normalizer: &normalizer.Parser{},
 		}

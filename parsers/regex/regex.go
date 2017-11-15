@@ -145,7 +145,11 @@ func (p *RegexLineParser) ParseLine(line string) (map[string]interface{}, error)
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	// parse lines one by one
 	wg := sync.WaitGroup{}
-	for i := 0; i < p.conf.NumParsers; i++ {
+	numParsers := 1
+	if p.conf.NumParsers > 0 {
+		numParsers = p.conf.NumParsers
+	}
+	for i := 0; i < numParsers; i++ {
 		wg.Add(1)
 		go func() {
 			for line := range lines {

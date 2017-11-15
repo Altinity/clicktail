@@ -54,8 +54,7 @@ type Options struct {
 }
 
 type Parser struct {
-	conf        Options
-	lineParsers []parsers.LineParser
+	conf Options
 
 	lock              sync.RWMutex
 	currentReplicaSet string
@@ -70,18 +69,19 @@ func (m *MongoLineParser) ParseLine(line string) (map[string]interface{}, error)
 
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
-	p.lineParsers = make([]parsers.LineParser, p.conf.NumParsers)
-	for i := 0; i < p.conf.NumParsers; i++ {
-		p.lineParsers[i] = &MongoLineParser{}
-	}
 	return nil
 }
 
 func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, prefixRegex *parsers.ExtRegexp) {
 	wg := sync.WaitGroup{}
-	for i := 0; i < p.conf.NumParsers; i++ {
+	numParsers := 1
+	if p.conf.NumParsers > 0 {
+		numParsers = p.conf.NumParsers
+	}
+	for i := 0; i < numParsers; i++ {
 		wg.Add(1)
-		go func(pNum int) {
+		go func() {
+			lineParser := &MongoLineParser{}
 			for line := range lines {
 				line = strings.TrimSpace(line)
 				// take care of any headers on the line
@@ -91,7 +91,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
 					line = strings.TrimPrefix(line, prefix)
 				}
-				values, err := p.lineParsers[pNum].ParseLine(line)
+				values, err := lineParser.ParseLine(line)
 				// we get a bunch of errors from the parser on mongo logs, skip em
 				if err == nil || (p.conf.LogPartials && logparser.IsPartialLogLine(err)) {
 					timestamp, err := p.parseTimestamp(values)
@@ -166,7 +166,7 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				}
 			}
 			wg.Done()
-		}(i)
+		}()
 	}
 	wg.Wait()
 	logrus.Debug("lines channel is closed, ending mongo processor")
