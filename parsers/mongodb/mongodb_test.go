@@ -1,9 +1,10 @@
 package mongodb
 
 import (
-	"reflect"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/honeycombio/honeytail/event"
 	"github.com/honeycombio/honeytail/httime"
@@ -417,11 +418,11 @@ func TestProcessLines(t *testing.T) {
 	}
 	m := &Parser{
 		conf: Options{
-			NumParsers: 5,
+			NumParsers: 1,
 		},
 	}
-	lines := make(chan string)
-	send := make(chan event.Event)
+	lines := make(chan string, len(tlm))
+	send := make(chan event.Event, len(tlm))
 	// prep the incoming channel with test lines for the processor
 	go func() {
 		for _, pair := range tlm {
@@ -430,36 +431,25 @@ func TestProcessLines(t *testing.T) {
 		close(lines)
 	}()
 	// spin up the processor to process our test lines
-	go m.ProcessLines(lines, send, nil)
-	for range tlm {
+	m.ProcessLines(lines, send, nil)
+	// We expect that it got sent through in order, serialized thanks to NumParsers = 1
+	for _, pair := range tlm {
 		ev := <-send
-		var found bool
-		for _, pair := range tlm {
-			if ev.Timestamp.UnixNano() != pair.expected.time.UnixNano() {
-				continue
-			}
+		assert.Equal(t, pair.expected.time.UnixNano(), ev.Timestamp.UnixNano())
 
-			var missing []string
-			for k := range pair.expected.includeData {
-				if _, ok := ev.Data[k]; !ok {
-					missing = append(missing, k)
-				} else if !reflect.DeepEqual(ev.Data[k], pair.expected.includeData[k]) {
-					continue
-				}
+		var missing []string
+		for k := range pair.expected.includeData {
+			if _, ok := ev.Data[k]; !ok {
+				missing = append(missing, k)
+			} else {
+				assert.Equal(t, pair.expected.includeData[k], ev.Data[k])
 			}
-			if missing != nil {
-				continue
-			}
-			for _, k := range pair.expected.excludeKeys {
-				if _, ok := ev.Data[k]; ok {
-					continue
-				}
-			}
-			found = true
 		}
-		if !found {
-			t.Errorf("couldn't find event %+v", ev)
+		assert.Nil(t, missing)
+		for _, k := range pair.expected.excludeKeys {
+			_, ok := ev.Data[k]
+			assert.False(t, ok)
 		}
-		found = false
 	}
+	close(send)
 }
