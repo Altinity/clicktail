@@ -104,7 +104,7 @@ var prefixValues = map[string]prefixField{
 }
 
 type Options struct {
-	LogLinePrefix string
+	LogLinePrefix string `long:"log_line_prefix" description:"Format string for PostgreSQL log line prefix"`
 }
 
 type Parser struct {
