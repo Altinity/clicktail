@@ -81,6 +81,23 @@ func TestSingleQueryParsing(t *testing.T) {
 				},
 			},
 		},
+		{
+			description:  "parse a prepared statement",
+			in:           `2017-11-07 23:05:16 UTC [3053-3] postgres@postgres LOG:  duration: 0.681 ms  execute sbstmt-1751784287-397260381: SELECT c FROM sbtest1 WHERE id=$1`,
+			prefixFormat: "%t [%p-%l] %u@%d",
+			expected: event.Event{
+				Timestamp: time.Date(2017, 11, 7, 23, 5, 16, 0, time.UTC),
+				Data: map[string]interface{}{
+					"user":     "postgres",
+					"database": "postgres",
+					"duration": 0.681,
+					"pid":      3053,
+					"session_line_number": 3,
+					"query":               "SELECT c FROM sbtest1 WHERE id=$1",
+					"normalized_query":    "select c from sbtest1 where id=$?",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testcases {

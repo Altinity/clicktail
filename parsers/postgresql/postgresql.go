@@ -68,7 +68,7 @@ const (
 	timestampRe   = `\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[.0-9]* [A-Z]+`
 	defaultPrefix = "%t [%p-%l] %u@%d"
 	// Regex string that matches the header of a slow query log line
-	slowQueryHeader = `\s*(?P<level>[A-Z0-9]+):\s+duration: (?P<duration>[0-9\.]+) ms\s+statement: `
+	slowQueryHeader = `\s*(?P<level>[A-Z0-9]+):\s+duration: (?P<duration>[0-9\.]+) ms\s+(?:(statement)|(execute \S+)): `
 )
 
 var slowQueryHeaderRegex = &parsers.ExtRegexp{regexp.MustCompile(slowQueryHeader)}
