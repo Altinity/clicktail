@@ -382,7 +382,7 @@ exit:
 }
 
 func (tkn *Tokenizer) scanString(delim rune, typ int) (int, []rune) {
-	startPos := tkn.Position
+	startPos := tkn.Position - 1
 	for {
 		ch := tkn.lastChar
 		tkn.next()

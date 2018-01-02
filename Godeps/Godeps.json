@@ -68,7 +68,7 @@
 		},
 		{
 			"ImportPath": "github.com/honeycombio/sqlparser",
-			"Rev": "fd1fdbfd738b8aa0cbc331afe62d350f3a7bb579"
+			"Rev": "b3d34a31c382151479dd1582f63a0b603cf2b9f3"
 		},
 		{
 			"ImportPath": "github.com/honeycombio/urlshaper",
