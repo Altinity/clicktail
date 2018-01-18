@@ -2,6 +2,8 @@
 package nginx
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -38,10 +40,14 @@ type Parser struct {
 func (n *Parser) Init(options interface{}) error {
 	n.conf = *options.(*Options)
 
+	if n.conf.ConfigFile == "" {
+		return errors.New("missing required option --nginx.conf=<path to your Nginx config file>")
+	}
+
 	// Verify we've got our config, find our format
-	nginxConfig, err := os.Open(string(n.conf.ConfigFile))
+	nginxConfig, err := os.Open(n.conf.ConfigFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("couldn't open Nginx config file %s: %v", n.conf.ConfigFile, err)
 	}
 	defer nginxConfig.Close()
 	// get the nginx log format from the config file

@@ -123,8 +123,8 @@ func run(options GlobalOptions) {
 
 		// and initialize it
 		if err := parser.Init(opts); err != nil {
-			logrus.WithFields(logrus.Fields{"parser": options.Reqs.ParserName, "err": err}).Fatal(
-				"err initializing parser module")
+			logrus.Fatalf(
+				"Error initializing %s parser module: %v", options.Reqs.ParserName, err)
 		}
 
 		// create a channel for sending events into libhoney
