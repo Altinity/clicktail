@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +13,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -79,7 +83,7 @@ func TestBasicSend(t *testing.T) {
 	defer fh.Close()
 	fmt.Fprintf(fh, `{"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Equal(t, ts.rsp.evtCounter, 1)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json"}`)
@@ -109,7 +113,7 @@ func TestMultipleFiles(t *testing.T) {
 	defer fh2.Close()
 	fmt.Fprintf(fh2, `{"key2":"val2"}`)
 	opts.Reqs.LogFiles = []string{logFile1, logFile2}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Equal(t, ts.rsp.evtCounter, 2)
 	assert.Contains(t, ts.rsp.reqBody, `{"key1":"val1"}`)
@@ -166,7 +170,7 @@ SELECT
                   id, team_id, name, description, slug, limit_kb, created_at, updated_at
                 FROM datasets WHERE team_id=17 AND slug='api-prod';`)
 	opts.Reqs.LogFiles = []string{logFile1, logFile2}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Equal(t, ts.rsp.evtCounter, 4)
 	assert.Contains(t, ts.rsp.reqBody, `"query":"SELECT * FROM orders`)
@@ -188,21 +192,21 @@ func TestSetVersion(t *testing.T) {
 	defer fh.Close()
 	fmt.Fprintf(fh, `{"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
-	run(opts)
+	run(context.Background(), opts)
 	userAgent := ts.rsp.req.Header.Get("User-Agent")
 	assert.Contains(t, userAgent, "libhoney-go")
 	setVersionUserAgent(false, "fancyParser")
-	run(opts)
+	run(context.Background(), opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
 	assert.Contains(t, userAgent, "libhoney-go")
 	assert.Contains(t, userAgent, "fancyParser")
 	BuildID = "test"
 	setVersionUserAgent(false, "fancyParser")
-	run(opts)
+	run(context.Background(), opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
 	assert.Contains(t, userAgent, " honeytail/test")
 	setVersionUserAgent(true, "fancyParser")
-	run(opts)
+	run(context.Background(), opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
 	assert.Contains(t, userAgent, " honeytail/test")
 	assert.Contains(t, userAgent, "fancyParser backfill")
@@ -218,15 +222,15 @@ func TestDropField(t *testing.T) {
 	defer fh.Close()
 	fmt.Fprintf(fh, `{"dropme":"chew","format":"json","reallygone":"notyet"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Contains(t, ts.rsp.reqBody, `{"dropme":"chew","format":"json","reallygone":"notyet"}`)
 	opts.DropFields = []string{"dropme"}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Equal(t, ts.rsp.reqCounter, 2)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","reallygone":"notyet"}`)
 	opts.DropFields = []string{"dropme", "reallygone"}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Equal(t, ts.rsp.reqCounter, 3)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json"}`)
 }
@@ -242,7 +246,7 @@ func TestScrubField(t *testing.T) {
 	fmt.Fprintf(fh, `{"format":"json","name":"hidden"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
 	opts.ScrubFields = []string{"name"}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","name":"e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c"}`)
 }
@@ -258,10 +262,10 @@ func TestAddField(t *testing.T) {
 	fmt.Fprintf(logfh, `{"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
 	opts.AddFields = []string{`newfield=newval`}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval"}`)
 	opts.AddFields = []string{"newfield=newval", "second=new"}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","newfield":"newval","second":"new"}`)
 }
 
@@ -278,7 +282,7 @@ func TestLinePrefix(t *testing.T) {
 	defer logfh.Close()
 	fmt.Fprintf(logfh, `Nov 13 10:19:31 app23 process.port[pid]: {"format":"json"}`)
 	opts.Reqs.LogFiles = []string{logFileName}
-	run(opts)
+	run(context.Background(), opts)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json","hostname":"app23","server_timestamp":"Nov 13 10:19:31"}`)
 }
 
@@ -411,7 +415,7 @@ func TestSampleRate(t *testing.T) {
 	opts.Reqs.LogFiles = []string{sampleLogFile}
 	opts.TailSample = false
 
-	run(opts)
+	run(context.Background(), opts)
 	// with no sampling, 50 lines -> 50 events
 	assert.Equal(t, ts.rsp.evtCounter, 50)
 	assert.Contains(t, ts.rsp.reqBody, `{"format":"json49"}`)
@@ -419,7 +423,7 @@ func TestSampleRate(t *testing.T) {
 
 	opts.SampleRate = 3
 	opts.TailSample = true
-	run(opts)
+	run(context.Background(), opts)
 	// setting a sample rate of 3 gets 17 requests.
 	// tail does the sampling
 	assert.Equal(t, ts.rsp.evtCounter, 17)
@@ -446,9 +450,78 @@ func TestReadFromOffset(t *testing.T) {
 	osf, _ := os.Create(offsetStateFile)
 	defer osf.Close()
 	fmt.Fprintf(osf, `{"INode":%d,"Offset":38}`, logStat.Ino)
-	run(opts)
+	run(context.Background(), opts)
 	assert.Equal(t, ts.rsp.reqCounter, 1)
 	assert.Equal(t, ts.rsp.evtCounter, 8)
+}
+
+// TestLogRotation tests that honeytail continues tailing after log rotation,
+// with different possible configurations:
+// * when honeytail polls or uses inotify
+// * when logs are rotated using rename/reopen, or using copy/truncate.
+func TestLogRotation(t *testing.T) {
+	for _, poll := range []bool{true, false} {
+		for _, copyTruncate := range []bool{true, false} {
+			t.Run(fmt.Sprintf("polling: %t; copyTruncate: %t", poll, copyTruncate), func(t *testing.T) {
+				wg := &sync.WaitGroup{}
+				opts := defaultOptions
+				opts.BatchFrequencyMs = 1
+				opts.Tail.Stop = false
+				opts.Tail.Poll = poll
+				ts := &testSetup{}
+				ts.start(t, &opts)
+				defer ts.close()
+				logFileName := ts.tmpdir + "/test.log"
+				fh, err := os.Create(logFileName)
+				if err != nil {
+					t.Fatal(err)
+				}
+				opts.Reqs.LogFiles = []string{logFileName}
+
+				// Run honeytail in the background
+				ctx, cancel := context.WithCancel(context.Background())
+				wg.Add(1)
+				go func() {
+					run(ctx, opts)
+					wg.Done()
+				}()
+
+				// Write a line to the log file, and check that honeytail reads it.
+				fmt.Fprint(fh, "{\"key\":1}\n")
+				fh.Close()
+				sent := expectWithTimeout(func() bool { return ts.rsp.evtCounter == 1 }, time.Second)
+				assert.True(t, sent, "Failed to read first log line")
+
+				// Simulate log rotation
+				if copyTruncate {
+					err = exec.Command("cp", logFileName, ts.tmpdir+"/test.log.1").Run()
+				} else {
+					err = os.Rename(logFileName, ts.tmpdir+"/test.log.1")
+				}
+				assert.NoError(t, err)
+				// Older versions of the inotify implementation in
+				// github.com/hpcloud/tail would fail to reopen a log file
+				// after a rename/reopen (https://github.com/hpcloud/tail/pull/115),
+				// but this delay is necessary to provoke the issue. Don't know why.
+				time.Sleep(100 * time.Millisecond)
+
+				// Write lines to the new log file, and check that honeytail reads them.
+				fh, err = os.Create(logFileName)
+				assert.NoError(t, err)
+				fmt.Fprint(fh, "{\"key\":2}\n")
+				fmt.Fprint(fh, "{\"key\":3}\n")
+				fh.Close()
+				// TODO: when logs are rotated using copy/truncate, we lose the
+				// first line of the new log file.
+				sent = expectWithTimeout(func() bool { return ts.rsp.evtCounter >= 2 }, time.Second)
+				assert.True(t, sent, "Failed to read log lines after rotation")
+
+				// Stop honeytail.
+				cancel()
+				wg.Wait()
+			})
+		}
+	}
 }
 
 // boilerplate to spin up a httptest server, create tmpdir, etc.
@@ -528,4 +601,15 @@ func (r *responder) reset() {
 	r.reqCounter = 0
 	r.evtCounter = 0
 	r.responseCode = 200
+}
+
+func expectWithTimeout(condition func() bool, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for deadline.After(time.Now()) {
+		if condition() {
+			return true
+		}
+	}
+	return false
+
 }

@@ -34,13 +34,13 @@ import (
 )
 
 // actually go and be leashy
-func run(options GlobalOptions) {
+func run(ctx context.Context, options GlobalOptions) {
 	logrus.Info("Starting honeytail")
 
 	stats := newResponseStats()
 
 	sigs := make(chan os.Signal, 1)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// spin up our transmission to send events to Honeycomb

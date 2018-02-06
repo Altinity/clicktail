@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -174,7 +175,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Could not verify Honeycomb write key: ", err)
 		os.Exit(1)
 	}
-	run(options)
+	run(context.Background(), options)
 }
 
 // setVersion sets the internal version ID and updates libhoney's user-agent
