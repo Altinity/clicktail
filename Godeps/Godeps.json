@@ -76,28 +76,28 @@
 		},
 		{
 			"ImportPath": "github.com/hpcloud/tail",
-			"Comment": "v1.0.0",
-			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+			"Comment": "v1.0.0-21-g37f4271",
+			"Rev": "37f4271387456dd1bf82ab1ad9229f060cc45386"
 		},
 		{
 			"ImportPath": "github.com/hpcloud/tail/ratelimiter",
-			"Comment": "v1.0.0",
-			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+			"Comment": "v1.0.0-21-g37f4271",
+			"Rev": "37f4271387456dd1bf82ab1ad9229f060cc45386"
 		},
 		{
 			"ImportPath": "github.com/hpcloud/tail/util",
-			"Comment": "v1.0.0",
-			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+			"Comment": "v1.0.0-21-g37f4271",
+			"Rev": "37f4271387456dd1bf82ab1ad9229f060cc45386"
 		},
 		{
 			"ImportPath": "github.com/hpcloud/tail/watch",
-			"Comment": "v1.0.0",
-			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+			"Comment": "v1.0.0-21-g37f4271",
+			"Rev": "37f4271387456dd1bf82ab1ad9229f060cc45386"
 		},
 		{
 			"ImportPath": "github.com/hpcloud/tail/winfile",
-			"Comment": "v1.0.0",
-			"Rev": "a30252cb686a21eb2d0b98132633053ec2f7f1e5"
+			"Comment": "v1.0.0-21-g37f4271",
+			"Rev": "37f4271387456dd1bf82ab1ad9229f060cc45386"
 		},
 		{
 			"ImportPath": "github.com/jessevdk/go-flags",
@@ -150,6 +150,16 @@
 		{
 			"ImportPath": "gopkg.in/tomb.v1",
 			"Rev": "dd632973f1e7218eb1089048e0798ec9ae7dceb8"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail/vendor/gopkg.in/tomb.v1",
+			"Comment": "v1.0.0-21-g37f4271",
+			"Rev": "37f4271387456dd1bf82ab1ad9229f060cc45386"
+		},
+		{
+			"ImportPath": "github.com/hpcloud/tail/vendor/gopkg.in/fsnotify.v1",
+			"Comment": "v1.0.0-21-g37f4271",
+			"Rev": "37f4271387456dd1bf82ab1ad9229f060cc45386"
 		}
 	]
 }
