@@ -368,7 +368,16 @@ func (r *requestShaper) requestShape(field string, ev *event.Event,
 	options GlobalOptions) {
 	if val, ok := ev.Data[field]; ok {
 		// start by splitting out method, uri, and version
-		parts := strings.Split(val.(string), " ")
+		strval, ok := val.(string)
+		if !ok {
+			logrus.WithFields(logrus.Fields{
+				"value": val,
+				"field": field,
+				"event": *ev,
+			}).Error("Error! Value did not correctly assert to be type string in request shaping. Skipping shaping.")
+			return
+		}
+		parts := strings.Split(strval, " ")
 		var path string
 		if len(parts) == 3 {
 			// treat it as METHOD /path HTTP/1.X
