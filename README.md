@@ -51,7 +51,7 @@ cat schema/mysql.sql | clickhouse-client --multiline
 
 Once schema is prepared you can use:
 ```
-clicktail --dataset='db.table' --parser=mysql --file=/var/log/mysql/mysql-slow.log
+clicktail --dataset='clicktail.mysql_slow_log' --parser=mysql --file=/var/log/mysql/mysql-slow.log
 ```
 
 For more advanced usage, options, and the ability to scrub or drop specific fields, see [documentation](https://honeycomb.io/docs/send-data/agent).
