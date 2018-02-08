@@ -49,9 +49,15 @@ Create Table for MySQL slow logs:
 cat schema/mysql.sql | clickhouse-client --multiline
 ```
 
-Once schema is prepared you can use:
+Once schema is prepared you can use for MySQL:
 ```
 clicktail --dataset='clicktail.mysql_slow_log' --parser=mysql --file=/var/log/mysql/mysql-slow.log
+```
+
+Or for Nginx:
+
+```
+clicktail -p nginx -f /var/log/nginx/access.log -d clicktail.nginx_log --nginx.conf=/etc/nginx/nginx.conf --nginx.format=combined
 ```
 
 For more advanced usage, options, and the ability to scrub or drop specific fields, see [documentation](https://honeycomb.io/docs/send-data/agent).

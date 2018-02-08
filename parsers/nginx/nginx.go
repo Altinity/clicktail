@@ -25,7 +25,7 @@ const (
 
 type Options struct {
 	ConfigFile      string `long:"conf" description:"Path to Nginx config file"`
-	LogFormatName   string `long:"format" description:"Log format name to look for in the Nginx config file"`
+	LogFormatName   string `long:"format" description:"Log format name to look for in the Nginx config file" default:"combined"`
 	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
 	TimeFieldFormat string `long:"time_format" description:"Timestamp format to use (strftime and Golang time.Parse supported)"`
 
