@@ -35,8 +35,23 @@ the binary will install to `/usr/local/bin/clicktail`
 
 ## Usage
 
+Make sure ClickHouse server has proper schema created. See `schema` folder for `CREATE DATABASE` and `CREATE TABLE` statements.
+
+Or do the following:
+
+Create DB:
 ```
-clicktail --dataset='db.table' --parser=mysql--file=/var/log/mysql/mysql-slow.log
+cat schema/db.sql | clickhouse-client --multiline
+```
+
+Create Table for MySQL slow logs:
+```
+cat schema/mysql.sql | clickhouse-client --multiline
+```
+
+Once schema is prepared you can use:
+```
+clicktail --dataset='db.table' --parser=mysql --file=/var/log/mysql/mysql-slow.log
 ```
 
 For more advanced usage, options, and the ability to scrub or drop specific fields, see [documentation](https://honeycomb.io/docs/send-data/agent).
