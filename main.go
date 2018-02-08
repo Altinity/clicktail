@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -11,7 +10,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/honeycombio/libhoney-go"
+	"github.com/Altinity/libclick-go"
 	flag "github.com/jessevdk/go-flags"
 
 	"github.com/honeycombio/honeytail/httime"
@@ -45,7 +44,7 @@ var validParsers = []string{
 
 // GlobalOptions has all the top level CLI flags that honeytail supports
 type GlobalOptions struct {
-	APIHost    string `hidden:"true" long:"api_host" description:"Host for the Honeycomb API" default:"https://api.honeycomb.io/"`
+	APIHost    string `long:"api_host" description:"Host for the Honeycomb API" default:"http://localhost:8123/"`
 	TailSample bool   `hidden:"true" description:"When true, sample while tailing. When false, sample post-parser events"`
 
 	ConfigFile string `short:"c" long:"config" description:"Config file for honeytail in INI format." no-ini:"true"`
@@ -92,7 +91,7 @@ type GlobalOptions struct {
 
 type RequiredOptions struct {
 	ParserName string   `short:"p" long:"parser" description:"Parser module to use. Use --list to list available options."`
-	WriteKey   string   `short:"k" long:"writekey" description:"Team write key"`
+	//WriteKey   string   `short:"k" long:"writekey" description:"Team write key"`
 	LogFiles   []string `short:"f" long:"file" description:"Log file(s) to parse. Use '-' for STDIN, use this flag multiple times to tail multiple files, or use a glob (/path/to/foo-*.log)"`
 	Dataset    string   `short:"d" long:"dataset" description:"Name of the dataset"`
 }
@@ -110,7 +109,7 @@ type OtherModes struct {
 func main() {
 	var options GlobalOptions
 	flagParser := flag.NewParser(&options, flag.PrintErrors)
-	flagParser.Usage = "-p <parser> -k <writekey> -f </path/to/logfile> -d <mydata> [optional arguments]\n\nSee https://honeycomb.io/docs/connect/agent/ for more detailed usage instructions."
+	flagParser.Usage = "-p <parser> -f </path/to/logfile> -d <mydata> [optional arguments]\n\nSee https://honeycomb.io/docs/connect/agent/ for more detailed usage instructions."
 
 	if extraArgs, err := flagParser.Parse(); err != nil || len(extraArgs) != 0 {
 		fmt.Println("Error: failed to parse the command line.")
@@ -168,17 +167,19 @@ func main() {
 	addParserDefaultOptions(&options)
 	sanityCheckOptions(&options)
 
-	if err := libhoney.VerifyWriteKey(libhoney.Config{
+    /*if err := libclick.VerifyWriteKey(libclick.Config{
 		APIHost:  options.APIHost,
 		WriteKey: options.Reqs.WriteKey,
 	}); err != nil {
 		fmt.Fprintln(os.Stderr, "Could not verify Honeycomb write key: ", err)
 		os.Exit(1)
-	}
-	run(context.Background(), options)
+	}*/
+
+
+	run(options)
 }
 
-// setVersion sets the internal version ID and updates libhoney's user-agent
+// setVersion sets the internal version ID and updates libclick's user-agent
 func setVersionUserAgent(backfill bool, parserName string) {
 	if BuildID == "" {
 		version = "dev"
@@ -188,14 +189,14 @@ func setVersionUserAgent(backfill bool, parserName string) {
 	if backfill {
 		parserName += " backfill"
 	}
-	libhoney.UserAgentAddition = fmt.Sprintf("honeytail/%s (%s)", version, parserName)
+	libclick.UserAgentAddition = fmt.Sprintf("clicktail/%s (%s)", version, parserName)
 }
 
 // handleOtherModes takse care of all flags that say we should just do something
 // and exit rather than actually parsing logs
 func handleOtherModes(fp *flag.Parser, modes OtherModes) {
 	if modes.Version {
-		fmt.Println("Honeytail version", version)
+		fmt.Println("Clicktail version", version)
 		os.Exit(0)
 	}
 	if modes.Help {
@@ -253,10 +254,10 @@ func sanityCheckOptions(options *GlobalOptions) {
 		fmt.Println("Parser required to be specified with the --parser flag.")
 		usage()
 		os.Exit(1)
-	case options.Reqs.WriteKey == "" || options.Reqs.WriteKey == "NULL":
+	/*case options.Reqs.WriteKey == "" || options.Reqs.WriteKey == "NULL":
 		fmt.Println("Write key required to be specified with the --writekey flag.")
 		usage()
-		os.Exit(1)
+		os.Exit(1)*/
 	case len(options.Reqs.LogFiles) == 0:
 		fmt.Println("Log file name or '-' required to be specified with the --file flag.")
 		usage()
@@ -317,9 +318,9 @@ func sanityCheckOptions(options *GlobalOptions) {
 
 func usage() {
 	fmt.Print(`
-Usage: honeytail -p <parser> -k <writekey> -f </path/to/logfile> -d <mydata> [optional arguments]
+Usage: clicktail -p <parser> -f </path/to/logfile> -d <mydata> [optional arguments]
 
 For even more detail on required and optional parameters, run
-honeytail --help
+clicktail --help
 `)
 }

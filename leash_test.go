@@ -194,11 +194,11 @@ func TestSetVersion(t *testing.T) {
 	opts.Reqs.LogFiles = []string{logFileName}
 	run(context.Background(), opts)
 	userAgent := ts.rsp.req.Header.Get("User-Agent")
-	assert.Contains(t, userAgent, "libhoney-go")
+	assert.Contains(t, userAgent, "libclick-go")
 	setVersionUserAgent(false, "fancyParser")
 	run(context.Background(), opts)
 	userAgent = ts.rsp.req.Header.Get("User-Agent")
-	assert.Contains(t, userAgent, "libhoney-go")
+	assert.Contains(t, userAgent, "libclick-go")
 	assert.Contains(t, userAgent, "fancyParser")
 	BuildID = "test"
 	setVersionUserAgent(false, "fancyParser")

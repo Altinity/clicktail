@@ -17,7 +17,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/honeycombio/dynsampler-go"
-	"github.com/honeycombio/libhoney-go"
+	"github.com/Altinity/libclick-go"
 	"github.com/honeycombio/urlshaper"
 
 	"github.com/honeycombio/honeytail/event"
@@ -34,18 +34,18 @@ import (
 )
 
 // actually go and be leashy
-func run(ctx context.Context, options GlobalOptions) {
+func run(options GlobalOptions) {
 	logrus.Info("Starting honeytail")
 
 	stats := newResponseStats()
 
 	sigs := make(chan os.Signal, 1)
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	// spin up our transmission to send events to Honeycomb
-	libhConfig := libhoney.Config{
-		WriteKey:             options.Reqs.WriteKey,
+	libhConfig := libclick.Config{
+		//WriteKey:             options.Reqs.WriteKey,
 		Dataset:              options.Reqs.Dataset,
 		APIHost:              options.APIHost,
 		MaxConcurrentBatches: options.NumSenders,
@@ -58,11 +58,11 @@ func run(ctx context.Context, options GlobalOptions) {
 		// to re-enqueue all dropped events
 		BlockOnResponse: true,
 
-		// limit pending work capacity so that we get backpressure from libhoney
+		// limit pending work capacity so that we get backpressure from libclick
 		// and block instead of sleeping inside sendToLibHoney.
 		PendingWorkCapacity: 20 * options.NumSenders,
 	}
-	if err := libhoney.Init(libhConfig); err != nil {
+	if err := libclick.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
 			"Error occured while spinning up Transimission")
 	}
@@ -127,7 +127,7 @@ func run(ctx context.Context, options GlobalOptions) {
 				"Error initializing %s parser module: %v", options.Reqs.ParserName, err)
 		}
 
-		// create a channel for sending events into libhoney
+		// create a channel for sending events into libclick
 		toBeSent := make(chan event.Event, options.NumSenders)
 		doneSending := make(chan bool)
 
@@ -157,11 +157,11 @@ func run(ctx context.Context, options GlobalOptions) {
 		}()
 
 		// start up the sender. all sources are either sampled when tailing or in-
-		// parser, so always tell libhoney events are pre-sampled
+		// parser, so always tell libclick events are pre-sampled
 		go sendToLibhoney(ctx, realToBeSent, toBeResent, delaySending, doneSending)
 
 		// start a goroutine that reads from responses and logs.
-		responses := libhoney.Responses()
+		responses := libclick.Responses()
 		responsesWG.Add(1)
 		go func() {
 			handleResponses(responses, stats, toBeResent, delaySending, options)
@@ -174,14 +174,14 @@ func run(ctx context.Context, options GlobalOptions) {
 			parser.ProcessLines(plines, toBeSent, prefixRegex)
 			// trigger the sending goroutine to finish up
 			close(toBeSent)
-			// wait for all the events in toBeSent to be handed to libhoney
+			// wait for all the events in toBeSent to be handed to libclick
 			<-doneSending
 			parsersWG.Done()
 		}(lines)
 	}
 	parsersWG.Wait()
-	// tell libhoney to finish up sending events
-	libhoney.Close()
+	// tell libclick to finish up sending events
+	libclick.Close()
 	// print out what we've done one last time
 	responsesWG.Wait()
 	stats.log()
@@ -368,16 +368,7 @@ func (r *requestShaper) requestShape(field string, ev *event.Event,
 	options GlobalOptions) {
 	if val, ok := ev.Data[field]; ok {
 		// start by splitting out method, uri, and version
-		strval, ok := val.(string)
-		if !ok {
-			logrus.WithFields(logrus.Fields{
-				"value": val,
-				"field": field,
-				"event": *ev,
-			}).Error("Error! Value did not correctly assert to be type string in request shaping. Skipping shaping.")
-			return
-		}
-		parts := strings.Split(strval, " ")
+		parts := strings.Split(val.(string), " ")
 		var path string
 		if len(parts) == 3 {
 			// treat it as METHOD /path HTTP/1.X
@@ -431,7 +422,7 @@ func whitelistKey(whiteKeys []string, key string) bool {
 }
 
 // sendToLibhoney reads from the toBeSent channel and shoves the events into
-// libhoney events, sending them on their way.
+// libclick events, sending them on their way.
 func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent chan event.Event,
 	delaySending chan int, doneSending chan bool) {
 	for {
@@ -468,7 +459,7 @@ func sendToLibhoney(ctx context.Context, toBeSent chan event.Event, toBeResent c
 	}
 }
 
-// sendEvent does the actual handoff to libhoney
+// sendEvent does the actual handoff to libclick
 func sendEvent(ev event.Event) {
 	if ev.SampleRate == -1 {
 		// drop the event!
@@ -477,7 +468,7 @@ func sendEvent(ev event.Event) {
 		}).Debug("droppped event due to sampling")
 		return
 	}
-	libhEv := libhoney.NewEvent()
+	libhEv := libclick.NewEvent()
 	libhEv.Metadata = ev
 	libhEv.Timestamp = ev.Timestamp
 	libhEv.SampleRate = uint(ev.SampleRate)
@@ -485,19 +476,19 @@ func sendEvent(ev event.Event) {
 		logrus.WithFields(logrus.Fields{
 			"event": ev,
 			"error": err,
-		}).Error("Unexpected error adding data to libhoney event")
+		}).Error("Unexpected error adding data to libclick event")
 	}
 	if err := libhEv.SendPresampled(); err != nil {
 		logrus.WithFields(logrus.Fields{
 			"event": ev,
 			"error": err,
-		}).Error("Unexpected error event to libhoney send")
+		}).Error("Unexpected error event to libclick send")
 	}
 }
 
 // handleResponses reads from the response queue, logging a summary and debug
 // re-enqueues any events that failed to send in a retryable way
-func handleResponses(responses chan libhoney.Response, stats *responseStats,
+func handleResponses(responses chan libclick.Response, stats *responseStats,
 	toBeResent chan event.Event, delaySending chan int,
 	options GlobalOptions) {
 	go logStats(stats, options.StatusInterval)

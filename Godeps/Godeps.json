@@ -42,7 +42,7 @@
 			"Rev": "45c9e836929976702894f73f10fb9ec43e0279d2"
 		},
 		{
-			"ImportPath": "github.com/honeycombio/libhoney-go",
+			"ImportPath": "github.com/Altinity/libclick-go",
 			"Comment": "v1.4.0-2-g1782b3e",
 			"Rev": "1782b3ea9b57603d943377079c2c7151049b1448"
 		},
