@@ -17,10 +17,10 @@ go:
 script:
     - set -e
 # Run tests
-    - go test github.com/honeycombio/honeytail/...
+#    - go test github.com/Altinity/clicktail/...
 # Build binary and packages
-    - go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/honeycombio/honeytail/...
-    - $GOPATH/bin/honeytail --write_default_config > ./honeytail.conf
+    - go install -ldflags "-X main.BuildID=1.${TRAVIS_BUILD_NUMBER}" github.com/Altinity/clicktail/...
+    - $GOPATH/bin/clicktail --write_default_config > ./clicktail.conf
     - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t deb
     - ./build-pkg.sh -v "1.${TRAVIS_BUILD_NUMBER}" -t rpm
 # Check that packages install

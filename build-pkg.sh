@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Build deb or rpm packages for honeytail.
+# Build deb or rpm packages for clicktail.
 set -e
 
 function usage() {
@@ -23,13 +23,13 @@ if [ -z "$version" ] || [ -z "$pkg_type" ]; then
     usage
 fi
 
-fpm -s dir -n honeytail \
-    -m "Honeycomb <team@honeycomb.io>" \
+fpm -s dir -n clicktail \
+    -m "Support <support@altinity.com>" \
     -p $GOPATH/bin \
     -v $version \
     -t $pkg_type \
     --pre-install=./preinstall \
-    $GOPATH/bin/honeytail=/usr/bin/honeytail \
-    ./honeytail.upstart=/etc/init/honeytail.conf \
-    ./honeytail.service=/lib/systemd/system/honeytail.service \
-    ./honeytail.conf=/etc/honeytail/honeytail.conf
+    $GOPATH/bin/clicktail=/usr/bin/clicktail \
+    ./clicktail.upstart=/etc/init/clicktail.conf \
+    ./clicktail.service=/lib/systemd/system/clicktail.service \
+    ./clicktail.conf=/etc/clicktail/clicktail.conf

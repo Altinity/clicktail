@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-USER="honeycomb"
-GROUP="honeycomb"
+USER="altinity"
+GROUP="altinity"
 
 # Create service group and user if they doesn't already exist
 if ! getent group $GROUP >/dev/null
@@ -24,4 +24,4 @@ then
           $USER >/dev/null
 fi
 
-usermod -a -G adm honeycomb
+usermod -a -G adm altinity

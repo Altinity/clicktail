@@ -1,0 +1,13 @@
+[Unit]
+Description=ClickHouse log tailer clicktail by Altinity
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/clicktail -c /etc/clicktail/clicktail.conf
+KillMode=process
+Restart=on-failure
+User=altinity
+Group=altinity
+
+[Install]
+Alias=clicktail clicktail.service

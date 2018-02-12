@@ -35,7 +35,7 @@ import (
 
 // actually go and be leashy
 func run(options GlobalOptions) {
-	logrus.Info("Starting honeytail")
+	logrus.Info("Starting clicktail")
 
 	stats := newResponseStats()
 
@@ -43,7 +43,7 @@ func run(options GlobalOptions) {
 	ctx, cancel := context.WithCancel(context.Background())
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	// spin up our transmission to send events to Honeycomb
+	// spin up our transmission to send events to ClickHouse
 	libhConfig := libclick.Config{
 		//WriteKey:             options.Reqs.WriteKey,
 		Dataset:              options.Reqs.Dataset,
@@ -59,7 +59,7 @@ func run(options GlobalOptions) {
 		BlockOnResponse: true,
 
 		// limit pending work capacity so that we get backpressure from libclick
-		// and block instead of sleeping inside sendToLibHoney.
+		// and block instead of sleeping inside sendToLibClick.
 		PendingWorkCapacity: 20 * options.NumSenders,
 	}
 	if err := libclick.Init(libhConfig); err != nil {
@@ -188,7 +188,7 @@ func run(options GlobalOptions) {
 	stats.logFinal()
 
 	// Nothing bad happened, yay
-	logrus.Info("Honeytail is all done, goodbye!")
+	logrus.Info("Clicktail is all done, goodbye!")
 }
 
 // getParserOptions takes a parser name and the global options struct
