@@ -19,6 +19,17 @@ Our complete list of parsers can be found in the [`parsers/` directory](parsers/
 
 ## Installation
 
+Install from `deb` package:
+
+```
+curl -s https://packagecloud.io/install/repositories/Altinity/clickhouse/script.deb.sh | bash
+```
+if you want to force `os` and `dist` of your system, use the following command:
+
+```
+curl -s https://packagecloud.io/install/repositories/Altinity/clickhouse/script.deb.sh | os=ubuntu dist=xenial bash
+```
+
 Install from source:
 
 ```
@@ -32,6 +43,20 @@ GOPATH=/usr/local go get github.com/Altinity/clicktail
 ```
 
 the binary will install to `/usr/local/bin/clicktail`
+
+## Configuration
+
+Use `clicktail.conf` file to manage options. There are section of the file called `Required Options` which should be set in the first place.
+
+#### Config Example
+
+`/etc/clicktail/clicktail.conf`
+```
+[Required Options]
+ParserName = mysql
+LogFiles = /var/log/mysql/mariadb-slow.log
+Dataset = clicktail.mysql_slow_log
+```
 
 ## Usage
 
