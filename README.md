@@ -85,5 +85,20 @@ Or for Nginx:
 clicktail -p nginx -f /var/log/nginx/access.log -d clicktail.nginx_log --nginx.conf=/etc/nginx/nginx.conf --nginx.format=combined
 ```
 
+## ClickHouse Setup
+
+Clicktail is required ClickHouse to be accessible as a target server. So you should have ClickHouse server installed.
+
+Follow these steps in order to install ClickHouse server and make it work with Clicktail.
+
+Once you installed Clickhouse you whould probably need it to be open to outside connections. In order to do so update `/etc/clickhouse-server/config.xml` to add the following line:
+
+`<listen_host>0.0.0.0</listen_host>`
+
+just after: `<listen_host>127.0.0.1</listen_host>`
+
+Also make sure ClickHouse port (which is `8123` by default) is open with your firewall.
+
+
 For more advanced usage, options, and the ability to scrub or drop specific fields, see [documentation](https://honeycomb.io/docs/send-data/agent).
 
