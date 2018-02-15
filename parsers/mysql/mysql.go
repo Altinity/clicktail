@@ -221,7 +221,7 @@ func getReadOnly(db *sql.DB) (*bool, error) {
 }
 
 func getHostedOn(db *sql.DB) (string, error) {
-	rows, err := db.Query("SHOW GLOBAL VARIABLES WHERE Variable_name = 'basedir';")
+	rows, err := db.Query("SHOW VARIABLES WHERE Variable_name = 'basedir'");
 	if err != nil {
 		return "", err
 	}

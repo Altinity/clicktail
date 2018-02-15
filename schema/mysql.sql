@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_slow_log
     tmp_tables UInt8,
     tmp_disk_tables UInt8,
     tmp_table_sizes UInt32,
-    transaction_id UInt32,
+    transaction_id String,
     query_cache_hit UInt8,
     full_scan UInt8,
     full_join UInt8,
@@ -44,4 +44,4 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_slow_log
     replica_lag String,
     role String
     
-) ENGINE = MergeTree(`_date`, (`_time`, query_time, lock_time), 8192)
+) ENGINE = MergeTree(`_date`, (`_time`, query_time, lock_time), 8192);

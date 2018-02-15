@@ -26,7 +26,7 @@ import (
 	"github.com/honeycombio/honeytail/parsers/htjson"
 	"github.com/honeycombio/honeytail/parsers/keyval"
 	"github.com/honeycombio/honeytail/parsers/mongodb"
-	"github.com/honeycombio/honeytail/parsers/mysql"
+	"github.com/Altinity/clicktail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
 	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/honeycombio/honeytail/parsers/regex"
@@ -35,7 +35,7 @@ import (
 
 // actually go and be leashy
 func run(options GlobalOptions) {
-	logrus.Info("Starting clicktail")
+	logrus.Info("Starting clicktail 1.0.20180215")
 
 	stats := newResponseStats()
 
