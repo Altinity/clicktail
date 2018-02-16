@@ -110,6 +110,8 @@ After you done with checking out your configuration options, you will need to st
 service clicktail start
 ```
 
+*NOTE*: Clicktail works as of `alitinty` system user so make sure log files are accessible from that user as well as `StateFile` option (or `/tmp` directory if `StateFile` is left intact).
+
 ## ClickHouse Setup
 
 Clicktail is required ClickHouse to be accessible as a target server. So you should have ClickHouse server installed.
