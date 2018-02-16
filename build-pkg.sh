@@ -32,4 +32,4 @@ fpm -s dir -n clicktail \
     $GOPATH/bin/clicktail=/usr/bin/clicktail \
     ./clicktail.upstart=/etc/init/clicktail.conf \
     ./clicktail.service=/lib/systemd/system/clicktail.service \
-    ./clicktail.conf=/etc/clicktail/clicktail.conf
+    ./clicktail.conf=/etc/clicktail/clicktail-example.conf

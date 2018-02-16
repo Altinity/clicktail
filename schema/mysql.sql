@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_slow_log
     rows_examined UInt32,
     rows_sent UInt32,
     lock_time Float32,
-    
+    connection_id UInt32,
     
     rows_affected UInt32,
     database String,

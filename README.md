@@ -19,7 +19,12 @@ Our complete list of parsers can be found in the [`parsers/` directory](parsers/
 
 ## Installation
 
-Install from `deb` package:
+There are three installation options for clicktail:
++ From package repository
++ From downloaded package
++ From source
+
+#### Install from `deb` package repository:
 
 ```
 curl -s https://packagecloud.io/install/repositories/Altinity/clickhouse/script.deb.sh | bash
@@ -30,7 +35,16 @@ if you want to force `os` and `dist` of your system, use the following command:
 curl -s https://packagecloud.io/install/repositories/Altinity/clickhouse/script.deb.sh | os=ubuntu dist=xenial bash
 ```
 
-Install from source:
+Then install clicktail itself:
+```
+apt-get install clicktail
+```
+
+#### Install from individual `deb` package
+
+Download and install the package from here: https://packagecloud.io/Altinity/clickhouse
+
+#### Install from source:
 
 ```
 go get github.com/Altinity/clicktail
@@ -46,12 +60,17 @@ the binary will install to `/usr/local/bin/clicktail`
 
 ## Configuration
 
+Clicktail supports command line options as well as configuration file. In fact the file is not picked up by default when you are running `clicktail` from CLI so one should explicitly specify it with `-c` option.
+
 Use `clicktail.conf` file to manage options. There are section of the file called `Required Options` which should be set in the first place.
 
 #### Config Example
 
 `/etc/clicktail/clicktail.conf`
 ```
+[Application Options]
+APIHost = http://localhost:8123/
+...
 [Required Options]
 ParserName = mysql
 LogFiles = /var/log/mysql/mariadb-slow.log
@@ -74,15 +93,21 @@ Create Table for MySQL slow logs:
 cat schema/mysql.sql | clickhouse-client --multiline
 ```
 
-Once schema is prepared you can use for MySQL:
+Once schema is prepared you can run binary from CLI with MySQL parser:
 ```
 clicktail --dataset='clicktail.mysql_slow_log' --parser=mysql --file=/var/log/mysql/mysql-slow.log
 ```
 
-Or for Nginx:
+Or with Nginx parser:
 
 ```
 clicktail -p nginx -f /var/log/nginx/access.log -d clicktail.nginx_log --nginx.conf=/etc/nginx/nginx.conf --nginx.format=combined
+```
+
+After you done with checking out your configuration options, you will need to store them in `clicktail.conf` in order to run `clicktail` as a service just like that:
+
+```
+service clicktail start
 ```
 
 ## ClickHouse Setup

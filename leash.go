@@ -35,7 +35,7 @@ import (
 
 // actually go and be leashy
 func run(options GlobalOptions) {
-	logrus.Info("Starting clicktail 1.0.20180215")
+	logrus.Info("Starting clicktail 1.0.20180216")
 
 	stats := newResponseStats()
 

@@ -59,6 +59,7 @@ const (
 	// Event attributes
 	userKey            = "user"
 	clientKey          = "client"
+	connectionIdKey    = "connection_id"
 	queryTimeKey       = "query_time"
 	lockTimeKey        = "lock_time"
 	rowsSentKey        = "rows_sent"
@@ -102,7 +103,7 @@ var (
 	// older versions of the mysql slow query log use this format for the timestamp
 	reOldTime    = parsers.ExtRegexp{regexp.MustCompile("^# Time: (?P<datetime>[0-9]+ [0-9:.]+)")}
 	reAdminPing  = parsers.ExtRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
-	reUser       = parsers.ExtRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+?)( Id:.+)?$")}
+	reUser       = parsers.ExtRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+?)( Id:(?P<connection>.+))?$")}
 	reQueryStats = parsers.ExtRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
 	// when capturing the log from the wire, you don't get lock time etc., only query time
 	reTCPQueryStats    = parsers.ExtRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+).*$")}
@@ -158,7 +159,13 @@ type perThreadParser struct {
 func (p *Parser) Init(options interface{}) error {
 	p.conf = *options.(*Options)
 	if p.conf.Host != "" {
-		url := fmt.Sprintf("%s:%s@tcp(%s)/", p.conf.User, p.conf.Pass, p.conf.Host)
+
+        var url string
+	    if strings.HasPrefix(p.conf.Host, "@") {
+		    url = fmt.Sprintf("%s:%s%s/", p.conf.User, p.conf.Pass, p.conf.Host)
+	    } else {
+	        url = fmt.Sprintf("%s:%s@tcp(%s)/", p.conf.User, p.conf.Pass, p.conf.Host)
+	    }
 		db, err := sql.Open("mysql", url)
 		if err != nil {
 			logrus.Fatal(err)
@@ -221,7 +228,7 @@ func getReadOnly(db *sql.DB) (*bool, error) {
 }
 
 func getHostedOn(db *sql.DB) (string, error) {
-	rows, err := db.Query("SHOW VARIABLES WHERE Variable_name = 'basedir'");
+	rows, err := db.Query("SHOW VARIABLES WHERE Variable_name = 'hostname'");
 	if err != nil {
 		return "", err
 	}
@@ -233,12 +240,12 @@ func getHostedOn(db *sql.DB) (string, error) {
 		if err := rows.Scan(&varName, &value); err != nil {
 			return "", err
 		}
-		if strings.HasPrefix(value, "/rdsdbbin/") {
-			return rdsStr, nil
-		}
-	}
 
-	// TODO: implement ec2 detection
+		return value, nil;
+		/*if strings.HasPrefix(value, "/rdsdbbin/") {
+			return rdsStr, nil
+		}*/
+	}
 
 	if err := rows.Err(); err != nil {
 		return "", err
@@ -435,6 +442,10 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 			query = ""
 			sq[userKey] = strings.Split(mg["user"], "[")[0]
 			sq[clientKey] = strings.TrimSpace(mg["host"])
+
+            if connectionVal, ok := mg["connection"]; ok {
+                sq[connectionIdKey] = strings.TrimSpace(connectionVal)
+            }
 		} else if _, mg := reQueryStats.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			if queryTime, err := strconv.ParseFloat(mg["queryTime"], 64); err == nil {
