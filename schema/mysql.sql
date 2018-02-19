@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_slow_log
     pages_distinct UInt32,
 
     hosted_on String,
-    read_only String,
-    replica_lag String,
+    read_only UInt8,
+    replica_lag UInt64,
     role String
     
 ) ENGINE = MergeTree(`_date`, (`_time`, query_time, lock_time), 8192);
