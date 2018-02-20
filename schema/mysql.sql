@@ -44,4 +44,4 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_slow_log
     replica_lag UInt64,
     role String
     
-) ENGINE = MergeTree(`_date`, (`_time`, query_time, lock_time), 8192);
+) ENGINE = MergeTree(`_date`, (`_time`, query), 8192);

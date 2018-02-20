@@ -24,7 +24,7 @@ There are three installation options for clicktail:
 + From downloaded package
 + From source
 
-#### Install from `deb` package repository:
+#### Install from `Apt` package repository:
 
 ```
 curl -s https://packagecloud.io/install/repositories/Altinity/clickhouse/script.deb.sh | bash
@@ -40,7 +40,7 @@ Then install clicktail itself:
 apt-get install clicktail
 ```
 
-#### Install from individual `deb` package
+#### Install from individual `dep` package
 
 Download and install the package from here: https://packagecloud.io/Altinity/clickhouse
 
@@ -75,6 +75,18 @@ APIHost = http://localhost:8123/
 ParserName = mysql
 LogFiles = /var/log/mysql/mariadb-slow.log
 Dataset = clicktail.mysql_slow_log
+```
+
+#### Extra options for MySQL parser
+
+There are useful options that could be passed along with mysql slow log entries but its not logged within the file itself, i.e. hostname of actual server. To get this data one can specify MySQL server connection details in config file.
+
+```
+...
+[MySQL Parser Options]
+Host = localhost:3306   ; or @unix(/var/run/mysqld/mysqld.sock)
+User = username
+Pass = userpass
 ```
 
 ## Usage
