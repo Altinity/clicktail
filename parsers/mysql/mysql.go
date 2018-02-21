@@ -71,6 +71,13 @@ const (
 	statementKey       = "statement"
 	tablesKey          = "tables"
 	commentsKey        = "comments"
+
+	schemaKey          = "schema"
+	errorNoKey         = "error_num"
+	killedKey          = "killed"
+	slRateTypeKey      = "sl_rate_type"
+	slRateLimitKey     = "sl_rate_limit"
+
 	// InnoDB keys (it seems)
 	bytesSentKey      = "bytes_sent"
 	tmpTablesKey      = "tmp_tables"
@@ -101,9 +108,10 @@ const (
 var (
 	reTime = parsers.ExtRegexp{regexp.MustCompile("^# Time: (?P<time>[^ ]+)Z *$")}
 	// older versions of the mysql slow query log use this format for the timestamp
-	reOldTime    = parsers.ExtRegexp{regexp.MustCompile("^# Time: (?P<datetime>[0-9]+ [0-9:.]+)")}
-	reAdminPing  = parsers.ExtRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
-	reUser       = parsers.ExtRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+?)( Id:(?P<connection>.+))?$")}
+	reOldTime     = parsers.ExtRegexp{regexp.MustCompile("^# Time: (?P<datetime>[0-9]+ [0-9:.]+)")}
+	reAdminPing   = parsers.ExtRegexp{regexp.MustCompile("^# administrator command: Ping; *$")}
+	reUser        = parsers.ExtRegexp{regexp.MustCompile("^# User@Host: (?P<user>[^#]+) @ (?P<host>[^#]+?)( Id:(?P<connection>.+))?$")}
+	reSchemaError = parsers.ExtRegexp{regexp.MustCompile("^# Schema: (?P<schema>[^#]+) Last_errno: (?P<errorNo>[0-9]+)(  Killed: (?P<killed>[0-9]+))?$")}
 	reQueryStats = parsers.ExtRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+) *Lock_time: (?P<lockTime>[0-9.]+) *Rows_sent: (?P<rowsSent>[0-9]+) *Rows_examined: (?P<rowsExamined>[0-9]+)( *Rows_affected: (?P<rowsAffected>[0-9]+))?.*$")}
 	// when capturing the log from the wire, you don't get lock time etc., only query time
 	reTCPQueryStats    = parsers.ExtRegexp{regexp.MustCompile("^# Query_time: (?P<queryTime>[0-9.]+).*$")}
@@ -116,6 +124,8 @@ var (
 	reInnodbUsage3     = parsers.ExtRegexp{regexp.MustCompile("^# +InnoDB_pages_distinct: (?P<pages_distinct>[0-9]+).*")}
 	reSetTime          = parsers.ExtRegexp{regexp.MustCompile("^SET timestamp=(?P<unixTime>[0-9]+);$")}
 	reUse              = parsers.ExtRegexp{regexp.MustCompile("^(?i)use ")}
+
+	reSlowLogRates     = parsers.ExtRegexp{regexp.MustCompile("^# Log_slow_rate_type: (?P<sl_rate_type>[^#]+)  Log_slow_rate_limit: (?P<sl_rate_limit>[0-9]+)$")}
 
 	// if 'flush logs' is run at the mysql prompt (which rds commonly does, apparently) the following shows up in slow query log:
 	//   /usr/local/Cellar/mysql/5.7.12/bin/mysqld, Version: 5.7.12 (Homebrew). started with:
@@ -446,7 +456,14 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
             if connectionVal, ok := mg["connection"]; ok {
                 sq[connectionIdKey] = strings.TrimSpace(connectionVal)
             }
-		} else if _, mg := reQueryStats.FindStringSubmatchMap(line); mg != nil {
+		} else if _, mg := reSchemaError.FindStringSubmatchMap(line); mg != nil {
+            sq[schemaKey] = strings.TrimSpace(mg["schema"])
+            sq[errorNoKey] = strings.TrimSpace(mg["errorNo"])
+
+            if killedVal, ok := mg["killed"]; ok {
+                sq[killedKey] = strings.TrimSpace(killedVal)
+            }
+        } else if _, mg := reQueryStats.FindStringSubmatchMap(line); mg != nil {
 			query = ""
 			if queryTime, err := strconv.ParseFloat(mg["queryTime"], 64); err == nil {
 				sq[queryTimeKey] = queryTime
@@ -517,6 +534,9 @@ func (p *Parser) handleEvent(ptp *perThreadParser, rawE []string) (
 			}
 		} else if _, mg := reInnodbTrx.FindStringSubmatchMap(line); mg != nil {
 			sq[transactionIDKey] = mg["trxId"]
+		} else if _, mg := reSlowLogRates.FindStringSubmatchMap(line); mg != nil {
+        	sq[slRateTypeKey] = mg["sl_rate_type"]
+        	sq[slRateLimitKey] = mg["sl_rate_limit"]
 		} else if match := reUse.FindString(line); match != "" {
 			query = ""
 			db := strings.TrimPrefix(line, match)

@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_slow_log
 (
     `_time` DateTime,
     `_date` Date default toDate(`_time`),
+    `_ms` UInt32,
 
     client String,
     query String,
@@ -10,11 +11,15 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_slow_log
     user String,
     statement String,
     tables String,
+    schema String,
     rows_examined UInt32,
     rows_sent UInt32,
     lock_time Float32,
     connection_id UInt32,
-    
+
+    error_num UInt32,
+    killed UInt8,
+
     rows_affected UInt32,
     database String,
     comments String,
@@ -38,6 +43,9 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_slow_log
     rec_lock_wait_sec Float32,
     queue_wait_sec Float32,
     pages_distinct UInt32,
+
+    sl_rate_type String,
+    sl_rate_limit UInt16,
 
     hosted_on String,
     read_only UInt8,
