@@ -52,9 +52,9 @@ type GlobalOptions struct {
 	ConfigFile string `short:"c" long:"config" description:"Config file for clicktail in INI format." no-ini:"true"`
 
 	SampleRate       uint `short:"r" long:"samplerate" description:"Only send 1 / N log lines" default:"1"`
-	NumSenders       uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to ClickHouse" default:"80"`
-	BatchFrequencyMs uint `long:"send_frequency_ms" description:"How frequently to flush batches" default:"100"`
-	BatchSize        uint `long:"send_batch_size" description:"Maximum number of messages to put in a batch" default:"50"`
+	NumSenders       uint `short:"P" long:"poolsize" description:"Number of concurrent connections to open to ClickHouse" default:"10"`
+	BatchFrequencyMs uint `long:"send_frequency_ms" description:"How frequently to flush batches" default:"1000"`
+	BatchSize        uint `long:"send_batch_size" description:"Maximum number of messages to put in a batch" default:"100000"`
 	Debug            bool `long:"debug" description:"Print debugging output"`
 	StatusInterval   uint `long:"status_interval" description:"How frequently, in seconds, to print out summary info" default:"60"`
 	Backfill         bool `long:"backfill" description:"Configure clicktail to ingest old data in order to backfill ClickHouse table. Sets the correct values for --backoff, --tail.read_from, and --tail.stop"`
