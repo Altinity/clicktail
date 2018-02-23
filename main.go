@@ -18,11 +18,12 @@ import (
 	"github.com/honeycombio/honeytail/parsers/htjson"
 	"github.com/honeycombio/honeytail/parsers/keyval"
 	"github.com/honeycombio/honeytail/parsers/mongodb"
-	"github.com/Altinity/clicktail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
 	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/honeycombio/honeytail/parsers/regex"
 	"github.com/honeycombio/honeytail/tail"
+	"github.com/Altinity/clicktail/parsers/mysql"
+	"github.com/Altinity/clicktail/parsers/mysqlaudit"
 )
 
 // BuildID is set by Travis CI
@@ -37,6 +38,7 @@ var validParsers = []string{
 	"keyval",
 	"mongo",
 	"mysql",
+	"mysqlaudit",
 	"nginx",
 	"postgresql",
 	"regex",
@@ -84,6 +86,7 @@ type GlobalOptions struct {
 	KeyVal     keyval.Options     `group:"KeyVal Parser Options" namespace:"keyval"`
 	Mongo      mongodb.Options    `group:"MongoDB Parser Options" namespace:"mongo"`
 	MySQL      mysql.Options      `group:"MySQL Parser Options" namespace:"mysql"`
+	MySQLAudit mysqlaudit.Options `group:"MySQL Audit Parser Options" namespace:"mysqlaudit"`
 	Nginx      nginx.Options      `group:"Nginx Parser Options" namespace:"nginx"`
 	PostgreSQL postgresql.Options `group:"PostgreSQL Parser Options" namespace:"postgresql"`
 	Regex      regex.Options      `group:"Regex Parser Options" namespace:"regex"`

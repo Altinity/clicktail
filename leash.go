@@ -26,16 +26,17 @@ import (
 	"github.com/honeycombio/honeytail/parsers/htjson"
 	"github.com/honeycombio/honeytail/parsers/keyval"
 	"github.com/honeycombio/honeytail/parsers/mongodb"
-	"github.com/Altinity/clicktail/parsers/mysql"
 	"github.com/honeycombio/honeytail/parsers/nginx"
 	"github.com/honeycombio/honeytail/parsers/postgresql"
 	"github.com/honeycombio/honeytail/parsers/regex"
 	"github.com/honeycombio/honeytail/tail"
+	"github.com/Altinity/clicktail/parsers/mysql"
+    "github.com/Altinity/clicktail/parsers/mysqlaudit"
 )
 
 // actually go and be leashy
 func run(options GlobalOptions) {
-	logrus.Info("Starting clicktail 1.0.20180216")
+	logrus.Info("Starting clicktail")
 
 	stats := newResponseStats()
 
@@ -223,6 +224,10 @@ func getParserAndOptions(options GlobalOptions) (parsers.Parser, interface{}) {
 		}
 		opts = &options.MySQL
 		opts.(*mysql.Options).NumParsers = int(options.NumSenders)
+	case "mysqlaudit":
+        parser = &mysqlaudit.Parser{}
+        opts = &options.MySQLAudit
+        opts.(*mysqlaudit.Options).NumParsers = int(options.NumSenders)
 	case "postgresql":
 		opts = &options.PostgreSQL
 		parser = &postgresql.Parser{}
