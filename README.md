@@ -56,6 +56,13 @@ to install to a specific path:
 GOPATH=/usr/local go get github.com/Altinity/clicktail
 ```
 
+...and make it
+
+```
+GOPATH=/usr/local go build
+GOPATH=/usr/local go install
+```
+
 the binary will install to `/usr/local/bin/clicktail`
 
 ## Configuration
@@ -121,6 +128,15 @@ After you done with checking out your configuration options, you will need to st
 ```
 service clicktail start
 ```
+
+#### Retroactive logs loading
+
+If you want to load files you already have into clicktail. You can use the same call as mentioned above but with extra parameter `--backfill`
+
+```
+clicktail --dataset='clicktail.mysql_slow_log' --parser=mysql --file=/var/log/mysql/mysql-slow.log --backfill
+```
+...this will load `mysql-slow.log` file into ClickTail and end the process.
 
 ## ClickHouse Setup
 
