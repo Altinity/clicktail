@@ -1,4 +1,4 @@
-// Package mysqlaudit consumes msyql audit logs
+// Package mysqlaudit consumes mysql audit logs
 package mysqlaudit
 
 import (

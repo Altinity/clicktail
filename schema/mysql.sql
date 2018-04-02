@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_slow_log
     connection_id UInt32,
 
     error_num UInt32,
-    killed UInt8,
+    killed UInt16,
 
     rows_affected UInt32,
     database String,
