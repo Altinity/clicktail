@@ -16,6 +16,7 @@ Our complete list of parsers can be found in the [`parsers/` directory](parsers/
 - [PostgreSQL](parsers/postgresql/)
 - [nginx](parsers/nginx/)
 - [regex](parsers/regex/)
+- [mysqlaudit](parsers/mysqlaudit/)
 
 ## Installation
 
