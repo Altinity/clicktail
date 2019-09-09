@@ -54,12 +54,11 @@ In the file ```/var/log/percona_audit.log```
 ```json
   Sep 08 12:08:52 pxc-1 percona_audit: {"audit_record":{"name":"Query","record":"1073_1970-01-01T00:00:00","timestamp":"2019-09-08T09:08:52 UTC","command_class":"select","connection_id":"37","status":0,"sqltext":"SELECT `id`, `field`, `value` FROM `blog`.`posts`","user":"web[web] @  [127.0.0.1]","host":"","os_user":"","ip":"127.0.0.1","db":"blog"}}
  Sep 08 12:09:52 pxc-2 percona_audit: {"audit_record":{"name":"Query","record":"1073_1970-01-01T00:00:00","timestamp":"2019-09-08T09:09:52 UTC","command_class":"select","connection_id":"37","status":0,"sqltext":"SELECT `id`, `field`, `value` FROM `blog`.`posts`","user":"web[web] @  [127.0.0.1]","host":"","os_user":"","ip":"127.0.0.1","db":"blog"}}
-
-
+```
+This file is imported into clickhouse with this command:
 ```bash
 [root@localhost]# clicktail --dataset='clicktail.mysql_audit_log' --parser=mysqlaudit --file=/var/log/percona_audit.log --mysqlaudit.filter_regex='percona_audit' --config=/etc/clicktail/clicktail.conf --mysqlaudit.syslog_ident=percona_audit: --backfill
 ```
-
 Breakdown of this command
 * `--dataset='clicktail.mysql_audit_log'` which dataset to store data in clickhouse
 * `--parser=mysqlaudit` which parser to use
