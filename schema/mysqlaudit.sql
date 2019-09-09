@@ -20,6 +20,6 @@ CREATE TABLE IF NOT EXISTS clicktail.mysql_audit_log
     sqltext String,
     status UInt32,
     user String,
-    startup_optionsi String
-
+    startup_optionsi String,
+    dbserver String
 ) ENGINE = MergeTree(`_date`, (`_time`, host, user), 8192);

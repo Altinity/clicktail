@@ -21,10 +21,11 @@ var (
 )
 
 type Options struct {
-	TimeFieldName   string `long:"timefield" description:"Name of the field that contains a timestamp"`
-	TimeFieldFormat string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
-	FilterRegex     string `long:"filter_regex" description:"a regular expression that will filter the input stream and only parse lines that match"`
-	InvertFilter    bool   `long:"invert_filter" description:"change the filter_regex to only process lines that do *not* match"`
+	TimeFieldName     string `long:"timefield" description:"Name of the field that contains a timestamp"`
+	TimeFieldFormat   string `long:"format" description:"Format of the timestamp found in timefield (supports strftime and Golang time formats)"`
+	FilterRegex       string `long:"filter_regex" description:"a regular expression that will filter the input stream and only parse lines that match"`
+	InvertFilter      bool   `long:"invert_filter" description:"change the filter_regex to only process lines that do *not* match"`
+	SyslogIdent       string `long:"syslog_ident" description:"If the log is collected via syslog. Handy if you got multiple database servers sending log to a central syslog server"`
 
 	NumParsers int `hidden:"true" description:"number of keyval parsers to spin up"`
 }
@@ -102,8 +103,24 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 					prefix, prefixFields = prefixRegex.FindStringSubmatchMap(line)
 					line = strings.TrimPrefix(line, prefix)
 				}
-
+				//take care of syslog headers if SyslogIdent is defined
+				var hostname string
+				if p.conf.SyslogIdent != "" {
+					//RegEXP mathcing the first word of the line which is the hostname
+					re := regexp.MustCompile(`^[^\s]*\s`)
+					hostname  = re.FindString(line)
+					if hostname != "" {
+					//Strip away hostname from line
+					line = strings.TrimPrefix(line, hostname)
+                    //strip away syslog identifier from line
+                    line = strings.TrimPrefix(line, p.conf.SyslogIdent)
+					}
+				}
 				parsedLine, err := p.lineParser.ParseLine(line)
+				//if a hostname is found it is applied to parsedLine
+				if hostname != "" { 
+                    			parsedLine["dbserver"] = hostname
+               			 }
 				if err != nil {
 					// skip lines that won't parse
 					logrus.WithFields(logrus.Fields{
