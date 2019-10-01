@@ -106,21 +106,21 @@ func (p *Parser) ProcessLines(lines <-chan string, send chan<- event.Event, pref
 				//take care of syslog headers if SyslogIdent is defined
 				var hostname string
 				if p.conf.SyslogIdent != "" {
-					//RegEXP mathcing the first word of the line which is the hostname
+					//regexp matching the first word of the line which is the hostname
 					re := regexp.MustCompile(`^[^\s]*\s`)
 					hostname  = re.FindString(line)
 					if hostname != "" {
-					//Strip away hostname from line
-					line = strings.TrimPrefix(line, hostname)
-                    //strip away syslog identifier from line
-                    line = strings.TrimPrefix(line, p.conf.SyslogIdent)
+						//Strip away hostname from line
+						line = strings.TrimPrefix(line, hostname)
+                    				//strip away syslog identifier from line
+                    				line = strings.TrimPrefix(line, p.conf.SyslogIdent)
 					}
 				}
 				parsedLine, err := p.lineParser.ParseLine(line)
 				//if a hostname is found it is applied to parsedLine
 				if hostname != "" { 
                     			parsedLine["dbserver"] = hostname
-               			 }
+               			}
 				if err != nil {
 					// skip lines that won't parse
 					logrus.WithFields(logrus.Fields{
