@@ -65,7 +65,7 @@ func run(options GlobalOptions) {
 	}
 	if err := libclick.Init(libhConfig); err != nil {
 		logrus.WithFields(logrus.Fields{"err": err}).Fatal(
-			"Error occured while spinning up Transimission")
+			"Error occurred while spinning up Transmission")
 	}
 
 	// compile the prefix regex once for use on all channels
